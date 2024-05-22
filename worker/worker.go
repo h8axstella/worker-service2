@@ -25,14 +25,23 @@ func ProcessWorkers() {
 
 		if pool.PoolName == "viabtc" {
 			fmt.Printf("Worker %s belongs to pool %s\n", worker.WorkerName, pool.PoolName)
-			fmt.Printf("Using API Key: [REDACTED] for worker %s\n", worker.WorkerName)
-			coins, err := api.FetchCoins(worker.AKey)
+
+			akey, skey, err := database.GetWorkerKeys(worker.ID)
+			if err != nil {
+				log.Printf("Error fetching keys for worker %s: %v\n", worker.WorkerName, err)
+				continue
+			}
+			fmt.Printf("Using AKey: [REDACTED] and SKey: [REDACTED] for worker %s\n", worker.WorkerName)
+
+			log.Printf("Fetched SKey: %s for worker %s (for debugging purposes)\n", skey, worker.WorkerName)
+
+			coins, err := api.FetchCoins(akey)
 			if err != nil {
 				log.Printf("Error fetching coins for worker %s: %v\n", worker.WorkerName, err)
 				continue
 			}
 			fmt.Printf("Fetched coins for worker %s: %v\n", worker.WorkerName, coins)
-			err = api.FetchHashrate(worker.AKey, worker.WorkerName, coins, worker.ID)
+			err = api.FetchHashrate(akey, worker.WorkerName, coins, worker.ID)
 			if err != nil {
 				log.Printf("Error fetching hashrate for worker %s: %v\n", worker.WorkerName, err)
 				continue
