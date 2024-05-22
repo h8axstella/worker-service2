@@ -10,23 +10,12 @@ type Worker struct {
 	SKey       string `json:"skey"`
 }
 
-type Asic struct {
-	ID                 string    `json:"id"`
-	SerialNumber       string    `json:"serial_number"`
-	WorkerID           string    `json:"worker_id"`
-	LastHashRate       float64   `json:"last_hash_rate"`
-	LastHashRateUpdate time.Time `json:"last_hash_rate_update"`
-	LastEdit           time.Time `json:"last_edit"`
-	Status             int       `json:"status"`
-}
-
 type Pool struct {
 	ID       string    `json:"id"`
 	PoolName string    `json:"pool_name"`
 	PoolURL  string    `json:"pool_url"`
 	LastEdit time.Time `json:"last_edit"`
 	Status   int       `json:"status"`
-	ApiKey   string    `json:"api_key"`
 }
 
 type WorkerHash struct {

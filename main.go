@@ -1,33 +1,35 @@
 package main
 
 import (
-	"fmt"
 	"log"
-	"net/http"
+	"time"
 	"worker-service/config"
 	"worker-service/database"
-	"worker-service/handlers"
 	"worker-service/worker"
 )
 
 func main() {
 	config.InitConfig()
 
-	fmt.Printf("DB_HOST: %s\n", config.AppConfig.DBHost)
-	fmt.Printf("DB_PORT: %s\n", config.AppConfig.DBPort)
-	fmt.Printf("DB_USER: %s\n", config.AppConfig.DBUser)
-	fmt.Printf("DB_NAME: %s\n", config.AppConfig.DBName)
-	fmt.Printf("DB_SSLMODE: %s\n", config.AppConfig.DBSSLMode)
-	fmt.Printf("APP_PORT: %s\n", config.AppConfig.Port)
-
 	database.Init()
 
-	go worker.StartWorkerProcessor()
+	startWorkerProcessor()
+}
 
-	http.HandleFunc("/workers", handlers.WorkerHandler)
-	port := config.AppConfig.Port
-	if port == "" {
-		port = "8080"
+func startWorkerProcessor() {
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	log.Printf("Starting initial worker processing at %s\n", time.Now())
+	worker.ProcessWorkers()
+	log.Printf("Initial worker processing completed at %s\n", time.Now())
+
+	for {
+		select {
+		case <-ticker.C:
+			log.Printf("Starting worker processing at %s\n", time.Now())
+			worker.ProcessWorkers()
+			log.Printf("Worker processing completed at %s\n", time.Now())
+		}
 	}
-	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
