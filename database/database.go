@@ -3,10 +3,9 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	_ "github.com/lib/pq"
 	"log"
 	"os"
-
-	_ "github.com/lib/pq"
 )
 
 type Worker struct {
@@ -61,7 +60,13 @@ func GetWorkerKeys(workerID string) (string, string, error) {
 
 func GetActiveWorkers() ([]Worker, error) {
 	query := `SELECT id, worker_name, akey, skey, fk_pool FROM tb_worker WHERE status = 0`
-	rows, err := DB.Query(query)
+	stmt, err := DB.Prepare(query)
+	if err != nil {
+		return nil, err
+	}
+	defer stmt.Close()
+
+	rows, err := stmt.Query()
 	if err != nil {
 		return nil, err
 	}
@@ -76,13 +81,22 @@ func GetActiveWorkers() ([]Worker, error) {
 		}
 		workers = append(workers, worker)
 	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
 	return workers, nil
 }
 
 func GetPoolByID(poolID string) (Pool, error) {
 	query := `SELECT id, pool_name, pool_url FROM tb_pool WHERE id = $1`
+	stmt, err := DB.Prepare(query)
+	if err != nil {
+		return Pool{}, err
+	}
+	defer stmt.Close()
+
 	var pool Pool
-	err := DB.QueryRow(query, poolID).Scan(&pool.ID, &pool.PoolName, &pool.PoolURL)
+	err = stmt.QueryRow(poolID).Scan(&pool.ID, &pool.PoolName, &pool.PoolURL)
 	return pool, err
 }
 
@@ -92,9 +106,15 @@ func UpdateWorkerHashrate(workerID string, hashrate float64) error {
 	VALUES ($1, $2, CURRENT_DATE)
 	ON CONFLICT (fk_worker, hash_date)
 	DO UPDATE SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();`
-	_, err := DB.Exec(query, workerID, hashrate)
+	stmt, err := DB.Prepare(query)
 	if err != nil {
-		return fmt.Errorf("failed to update hashrate: %v", err)
+		return fmt.Errorf("failed to prepare query: %v", err)
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(workerID, hashrate)
+	if err != nil {
+		return fmt.Errorf("failed to execute query: %v", err)
 	}
 	return nil
 }
