@@ -15,6 +15,7 @@ type Config struct {
 	DBName     string
 	DBSSLMode  string
 	Port       string
+	BTCKey     string
 }
 
 var AppConfig Config
@@ -29,8 +30,8 @@ func InitConfig() {
 		DBName:     getEnv("DB_NAME"),
 		DBSSLMode:  getEnv("DB_SSLMODE"),
 		Port:       getEnv("APP_PORT"),
+		BTCKey:     getEnv("BTC_KEY"),
 	}
-
 	requiredVars := []string{
 		AppConfig.DBHost,
 		AppConfig.DBPort,
@@ -39,8 +40,8 @@ func InitConfig() {
 		AppConfig.DBName,
 		AppConfig.DBSSLMode,
 		AppConfig.Port,
+		AppConfig.BTCKey,
 	}
-
 	for _, v := range requiredVars {
 		if v == "" {
 			log.Fatalf("Missing required environment variable.")
@@ -54,7 +55,6 @@ func loadEnv() {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 	defer file.Close()
-
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -65,7 +65,6 @@ func loadEnv() {
 			}
 		}
 	}
-
 	if err := scanner.Err(); err != nil {
 		log.Fatalf("Error reading .env file: %v", err)
 	}
@@ -76,6 +75,5 @@ func getEnv(key string) string {
 	if value == "" {
 		log.Fatalf("Environment variable %s is not set", key)
 	}
-
 	return value
 }
