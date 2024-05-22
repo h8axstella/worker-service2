@@ -1,6 +1,5 @@
 
 go.sum
-
 *.exe
 *.exe~
 *.dll
