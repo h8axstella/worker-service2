@@ -3,7 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"worker-service/database"
@@ -17,14 +17,13 @@ func FetchCoins(apiKey string) ([]string, error) {
 		return nil, fmt.Errorf("error creating request: %v", err)
 	}
 	req.Header.Add("X-API-KEY", apiKey)
-
 	response, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error making request: %v", err)
 	}
 	defer response.Body.Close()
 
-	body, err := ioutil.ReadAll(response.Body)
+	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, fmt.Errorf("error reading response body: %v", err)
 	}
@@ -54,21 +53,19 @@ func FetchHashrate(apiKey, workerName string, coins []string, workerID string) e
 		client := &http.Client{}
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
-			log.Printf("Error creating request for coin %s: %v\n", coin, err)
-			return err
+			return fmt.Errorf("Error creating request for coin %s: %v", coin, err)
 		}
 		req.Header.Add("X-API-KEY", apiKey)
-
 		response, err := client.Do(req)
 		if err != nil {
-			log.Printf("Error fetching hashrate for coin %s: %v\n", coin, err)
+			log.Printf("Error fetching hashrate for coin %s: %v", coin, err)
 			continue
 		}
 		defer response.Body.Close()
 
-		body, err := ioutil.ReadAll(response.Body)
+		body, err := io.ReadAll(response.Body)
 		if err != nil {
-			log.Printf("Error reading response body for coin %s: %v\n", coin, err)
+			log.Printf("Error reading response body for coin %s: %v", coin, err)
 			continue
 		}
 
@@ -83,7 +80,7 @@ func FetchHashrate(apiKey, workerName string, coins []string, workerID string) e
 		}
 		err = json.Unmarshal(body, &hashrateData)
 		if err != nil {
-			log.Printf("Error unmarshalling response body for coin %s: %v\n", coin, err)
+			log.Printf("Error unmarshalling response body for coin %s: %v", coin, err)
 			continue
 		}
 
@@ -91,7 +88,7 @@ func FetchHashrate(apiKey, workerName string, coins []string, workerID string) e
 			if data.WorkerName == workerName {
 				err := database.UpdateWorkerHashrate(workerID, data.Hashrate24Hour)
 				if err != nil {
-					log.Printf("Error updating hashrate for worker %s: %v\n", workerName, err)
+					return fmt.Errorf("Error updating hashrate for worker %s: %v", workerName, err)
 				}
 			}
 		}

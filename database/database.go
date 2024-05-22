@@ -3,9 +3,10 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	_ "github.com/lib/pq"
 	"log"
 	"os"
+
+	_ "github.com/lib/pq"
 )
 
 type Worker struct {
@@ -53,6 +54,7 @@ func GetWorkerKeys(workerID string) (string, string, error) {
 	var akey, skey string
 	err := DB.QueryRow(query, workerID).Scan(&akey, &skey)
 	if err != nil {
+		log.Printf("Error getting worker keys for workerID %s: %v", workerID, err)
 		return "", "", err
 	}
 	return akey, skey, nil
@@ -62,12 +64,14 @@ func GetActiveWorkers() ([]Worker, error) {
 	query := `SELECT id, worker_name, akey, skey, fk_pool FROM tb_worker WHERE status = 0`
 	stmt, err := DB.Prepare(query)
 	if err != nil {
+		log.Printf("Error preparing statement: %v", err)
 		return nil, err
 	}
 	defer stmt.Close()
 
 	rows, err := stmt.Query()
 	if err != nil {
+		log.Printf("Error querying active workers: %v", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -77,13 +81,17 @@ func GetActiveWorkers() ([]Worker, error) {
 		var worker Worker
 		err := rows.Scan(&worker.ID, &worker.WorkerName, &worker.AKey, &worker.SKey, &worker.FkPool)
 		if err != nil {
+			log.Printf("Error scanning worker row: %v", err)
 			return nil, err
 		}
 		workers = append(workers, worker)
 	}
+
 	if err = rows.Err(); err != nil {
+		log.Printf("Error iterating over rows: %v", err)
 		return nil, err
 	}
+
 	return workers, nil
 }
 
@@ -91,29 +99,36 @@ func GetPoolByID(poolID string) (Pool, error) {
 	query := `SELECT id, pool_name, pool_url FROM tb_pool WHERE id = $1`
 	stmt, err := DB.Prepare(query)
 	if err != nil {
+		log.Printf("Error preparing statement: %v", err)
 		return Pool{}, err
 	}
 	defer stmt.Close()
 
 	var pool Pool
 	err = stmt.QueryRow(poolID).Scan(&pool.ID, &pool.PoolName, &pool.PoolURL)
+	if err != nil {
+		log.Printf("Error getting pool by ID %s: %v", poolID, err)
+	}
 	return pool, err
 }
 
 func UpdateWorkerHashrate(workerID string, hashrate float64) error {
 	query := `
-	INSERT INTO tb_worker_hash (fk_worker, daily_hash, hash_date)
-	VALUES ($1, $2, CURRENT_DATE)
-	ON CONFLICT (fk_worker, hash_date)
-	DO UPDATE SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();`
+		INSERT INTO tb_worker_hash (fk_worker, daily_hash, hash_date)
+		VALUES ($1, $2, CURRENT_DATE)
+		ON CONFLICT (fk_worker, hash_date) DO UPDATE
+		SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();
+	`
 	stmt, err := DB.Prepare(query)
 	if err != nil {
+		log.Printf("Failed to prepare query: %v", err)
 		return fmt.Errorf("failed to prepare query: %v", err)
 	}
 	defer stmt.Close()
 
 	_, err = stmt.Exec(workerID, hashrate)
 	if err != nil {
+		log.Printf("Failed to execute query: %v", err)
 		return fmt.Errorf("failed to execute query: %v", err)
 	}
 	return nil

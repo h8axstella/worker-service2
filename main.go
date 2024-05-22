@@ -10,9 +10,7 @@ import (
 
 func main() {
 	config.InitConfig()
-
 	database.Init()
-
 	startWorkerProcessor()
 }
 
