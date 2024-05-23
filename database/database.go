@@ -5,23 +5,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"worker-service/models"
 
 	_ "github.com/lib/pq"
 )
-
-type Worker struct {
-	ID         string `json:"id"`
-	WorkerName string `json:"worker_name"`
-	FkPool     string `json:"fk_pool"`
-	AKey       string `json:"akey"`
-	SKey       string `json:"skey"`
-}
-
-type Pool struct {
-	ID       string `json:"id"`
-	PoolName string `json:"pool_name"`
-	PoolURL  string `json:"pool_url"`
-}
 
 var DB *sql.DB
 
@@ -60,7 +47,7 @@ func GetWorkerKeys(workerID string) (string, string, error) {
 	return akey, skey, nil
 }
 
-func GetActiveWorkers() ([]Worker, error) {
+func GetActiveWorkers() ([]models.Worker, error) {
 	query := `SELECT id, worker_name, akey, skey, fk_pool FROM tb_worker WHERE status = 0`
 	rows, err := DB.Query(query)
 	if err != nil {
@@ -69,9 +56,9 @@ func GetActiveWorkers() ([]Worker, error) {
 	}
 	defer rows.Close()
 
-	var workers []Worker
+	var workers []models.Worker
 	for rows.Next() {
-		var worker Worker
+		var worker models.Worker
 		err := rows.Scan(&worker.ID, &worker.WorkerName, &worker.AKey, &worker.SKey, &worker.FkPool)
 		if err != nil {
 			log.Printf("Error scanning worker row: %v", err)
@@ -88,9 +75,9 @@ func GetActiveWorkers() ([]Worker, error) {
 	return workers, nil
 }
 
-func GetPoolByID(poolID string) (Pool, error) {
+func GetPoolByID(poolID string) (models.Pool, error) {
 	query := `SELECT id, pool_name, pool_url FROM tb_pool WHERE id = $1`
-	var pool Pool
+	var pool models.Pool
 	err := DB.QueryRow(query, poolID).Scan(&pool.ID, &pool.PoolName, &pool.PoolURL)
 	if err != nil {
 		log.Printf("Error getting pool by ID %s: %v", poolID, err)
@@ -98,14 +85,14 @@ func GetPoolByID(poolID string) (Pool, error) {
 	return pool, err
 }
 
-func UpdateWorkerHashrate(workerID string, hashrate float64) error {
+func UpdateWorkerHashrate(workerHash models.WorkerHash) error {
 	query := `
-        INSERT INTO tb_worker_hash (fk_worker, daily_hash, hash_date)
-        VALUES ($1, $2, CURRENT_DATE)
-        ON CONFLICT (fk_worker, hash_date) DO UPDATE
+        INSERT INTO tb_worker_hash (fk_worker, daily_hash, hash_date, coin)
+        VALUES ($1, $2, CURRENT_DATE, $3)
+        ON CONFLICT (fk_worker, hash_date, coin) DO UPDATE
         SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();
     `
-	_, err := DB.Exec(query, workerID, hashrate)
+	_, err := DB.Exec(query, workerHash.FkWorker, workerHash.DailyHash, workerHash.Coin)
 	if err != nil {
 		log.Printf("Failed to execute query: %v", err)
 		return fmt.Errorf("failed to execute query: %v", err)

@@ -51,27 +51,46 @@ func ProcessWorkers() {
 
 		fmt.Printf("Using AKey:[REDACTED] for worker %s\n", worker.WorkerName)
 
-		if pool.PoolName == "viabtc" {
+		switch pool.PoolName {
+		case "viabtc":
 			fmt.Printf("Worker %s belongs to pool %s\n", worker.WorkerName, pool.PoolName)
 
 			fmt.Printf("Using SKey for signature: [REDACTED]\n")
 			signature := utils.CreateSignature(skey, "GET", "/res/openapi/v1/hashrate/worker", "params")
 			log.Printf("Signature created for worker %s: %s\n", worker.WorkerName, signature)
 
-			coins, err := api.FetchCoins(akey)
+			coins, err := api.FetchCoins(akey, pool.PoolURL)
 			if err != nil {
 				log.Printf("Error fetching coins for worker %s: %v\n", worker.WorkerName, err)
 				continue
 			}
 			fmt.Printf("Fetched coins for worker %s: %v\n", worker.WorkerName, coins)
 
-			err = api.FetchHashrate(akey, worker.WorkerName, coins, worker.ID)
+			err = api.FetchHashrate(pool.PoolURL, akey, worker.WorkerName, coins, worker.ID)
 			if err != nil {
 				log.Printf("Error fetching hashrate for worker %s: %v\n", worker.WorkerName, err)
 				continue
 			}
-		} else {
-			fmt.Printf("Worker %s belongs to pool %s, which does not use SKey\n", worker.WorkerName, pool.PoolName)
+
+		case "f2pool":
+			fmt.Printf("Worker %s belongs to pool %s\n", worker.WorkerName, pool.PoolName)
+			currencies := []string{"bitcoin", "bitcoin-cash", "litecoin"}
+			err = api.FetchF2PoolHashrate(pool.PoolURL, akey, worker.WorkerName, currencies, worker.ID)
+			if err != nil {
+				log.Printf("Error fetching hashrate for worker %s: %v\n", worker.WorkerName, err)
+				continue
+			}
+
+		case "emcd":
+			fmt.Printf("Worker %s belongs to pool %s\n", worker.WorkerName, pool.PoolName)
+			coins := []string{"BTC", "BCH", "LTC", "DASH", "ETC", "DOGE"}
+			for _, coin := range coins {
+				err = api.FetchEMCDHashrate(pool.PoolURL, akey, worker.WorkerName, worker.ID, coin)
+				if err != nil {
+					log.Printf("Error fetching hashrate for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
+					continue
+				}
+			}
 		}
 	}
 }

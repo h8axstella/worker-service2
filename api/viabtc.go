@@ -6,11 +6,13 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 	"worker-service/database"
+	"worker-service/models"
 )
 
-func FetchCoins(apiKey string) ([]string, error) {
-	url := "https://www.viabtc.com/res/openapi/v1/account"
+func FetchCoins(baseURL, apiKey string) ([]string, error) {
+	url := fmt.Sprintf("%s/v1/account", baseURL)
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -21,20 +23,18 @@ func FetchCoins(apiKey string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error making request: %v", err)
 	}
-	defer response.Body.Close()
+	defer func() {
+		if cerr := response.Body.Close(); cerr != nil {
+			err = cerr
+		}
+	}()
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, fmt.Errorf("error reading response body: %v", err)
 	}
 
-	var res struct {
-		Data struct {
-			Balance []struct {
-				Coin string `json:"coin"`
-			} `json:"balance"`
-		} `json:"data"`
-	}
+	var res models.ViaBTCAccountResponse
 	err = json.Unmarshal(body, &res)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshalling response body: %v", err)
@@ -47,9 +47,9 @@ func FetchCoins(apiKey string) ([]string, error) {
 	return coins, nil
 }
 
-func FetchHashrate(apiKey, workerName string, coins []string, workerID string) error {
+func FetchHashrate(baseURL, apiKey, workerName string, coins []string, workerID string) error {
 	for _, coin := range coins {
-		url := fmt.Sprintf("https://www.viabtc.com/res/openapi/v1/hashrate/worker?coin=%s", coin)
+		url := fmt.Sprintf("%s/v1/hashrate/worker?coin=%s", baseURL, coin)
 		client := &http.Client{}
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
@@ -61,7 +61,11 @@ func FetchHashrate(apiKey, workerName string, coins []string, workerID string) e
 			log.Printf("Error fetching hashrate for coin %s: %v", coin, err)
 			continue
 		}
-		defer response.Body.Close()
+		defer func() {
+			if cerr := response.Body.Close(); cerr != nil {
+				err = cerr
+			}
+		}()
 
 		body, err := io.ReadAll(response.Body)
 		if err != nil {
@@ -69,15 +73,7 @@ func FetchHashrate(apiKey, workerName string, coins []string, workerID string) e
 			continue
 		}
 
-		var hashrateData struct {
-			Code int `json:"code"`
-			Data struct {
-				Data []struct {
-					Hashrate24Hour float64 `json:"hashrate_24hour,string"`
-					WorkerName     string  `json:"worker_name"`
-				} `json:"data"`
-			} `json:"data"`
-		}
+		var hashrateData models.ViaBTCHashrateResponse
 		err = json.Unmarshal(body, &hashrateData)
 		if err != nil {
 			log.Printf("Error unmarshalling response body for coin %s: %v", coin, err)
@@ -86,7 +82,13 @@ func FetchHashrate(apiKey, workerName string, coins []string, workerID string) e
 
 		for _, data := range hashrateData.Data.Data {
 			if data.WorkerName == workerName {
-				err := database.UpdateWorkerHashrate(workerID, data.Hashrate24Hour)
+				workerHash := models.WorkerHash{
+					FkWorker:  workerID,
+					Coin:      coin,
+					DailyHash: data.Hashrate24Hour,
+					LastEdit:  time.Now(),
+				}
+				err := database.UpdateWorkerHashrate(workerHash)
 				if err != nil {
 					return fmt.Errorf("Error updating hashrate for worker %s: %v", workerName, err)
 				}
