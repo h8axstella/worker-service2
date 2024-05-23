@@ -3,10 +3,27 @@ package worker
 import (
 	"fmt"
 	"log"
+	"time"
 	"worker-service/api"
 	"worker-service/database"
-	"worker-service/utils" // Для использования CreateSignature
+	"worker-service/utils"
 )
+
+func StartWorkerProcessor() {
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+	log.Printf("Starting initial worker processing at %s\n", time.Now())
+	ProcessWorkers()
+	log.Printf("Initial worker processing completed at %s\n", time.Now())
+	for {
+		select {
+		case <-ticker.C:
+			log.Printf("Starting worker processing at %s\n", time.Now())
+			ProcessWorkers()
+			log.Printf("Worker processing completed at %s\n", time.Now())
+		}
+	}
+}
 
 func ProcessWorkers() {
 	fmt.Println("Fetching active workers...")
@@ -54,9 +71,7 @@ func ProcessWorkers() {
 				continue
 			}
 		} else {
-
 			fmt.Printf("Worker %s belongs to pool %s, which does not use SKey\n", worker.WorkerName, pool.PoolName)
-
 		}
 	}
 }
