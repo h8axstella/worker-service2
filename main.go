@@ -19,7 +19,7 @@ func main() {
 }
 
 func startWorkerProcessor() {
-	ticker := time.NewTicker(12 * time.Hour)
+	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 	log.Printf("Starting initial worker processing at %s\n", time.Now())
 	worker.ProcessWorkers()
@@ -34,12 +34,10 @@ func startWorkerProcessor() {
 	}
 }
 
-// Исправленная функция scheduleBTCProcessing
 func scheduleBTCProcessing() {
-	// First run immediately
 	course.ProcessBTCPrice()
 
-	ticker := time.NewTicker(12 * time.Hour)
+	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 	for {
 		select {

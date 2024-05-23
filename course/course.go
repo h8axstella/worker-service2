@@ -1,8 +1,10 @@
 package course
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lib/pq"
 	"io"
 	"log"
 	"net/http"
@@ -11,7 +13,7 @@ import (
 	"worker-service/config"
 	"worker-service/database"
 
-	"github.com/lib/pq"
+	_ "github.com/lib/pq"
 )
 
 type CoinMarketCapResponse struct {
@@ -69,8 +71,9 @@ func getBTCPrice(apiKey string) (float64, time.Time, error) {
 }
 
 func saveBTCPriceToDB(price float64, timestamp time.Time) error {
+	ctx := context.Background()
 	query := "INSERT INTO tb_btc_rate (rate_date, rate) VALUES ($1, $2)"
-	_, err := database.DB.Exec(query, timestamp, price)
+	_, err := database.DB.ExecContext(ctx, query, timestamp, price)
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
 			if pqErr.Code == "23505" { // UniqueViolation

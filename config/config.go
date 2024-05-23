@@ -55,16 +55,20 @@ func loadEnv() {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 	defer file.Close()
+
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if len(line) > 0 && line[0] != '#' {
 			parts := strings.SplitN(line, "=", 2)
 			if len(parts) == 2 {
-				os.Setenv(parts[0], parts[1])
+				if err := os.Setenv(parts[0], parts[1]); err != nil {
+					log.Printf("Error setting env variable %s: %v", parts[0], err)
+				}
 			}
 		}
 	}
+
 	if err := scanner.Err(); err != nil {
 		log.Fatalf("Error reading .env file: %v", err)
 	}
