@@ -74,3 +74,7 @@ type EMCDWorkersInfo struct {
 		Hashrate24h float64 `json:"hashrate_24hour"`
 	} `json:"data"`
 }
+type Host struct {
+	ID         string `json:"id"`
+	WorkerName string `json:"host_worker"`
+}

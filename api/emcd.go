@@ -10,7 +10,7 @@ import (
 	"worker-service/models"
 )
 
-func FetchEMCDHashrate(baseURL, apiKey, workerName, workerID, coin string) error {
+func FetchEMCDHashrateф(baseURL, apiKey, workerName, workerID, coin string) error {
 	url := fmt.Sprintf("%s/workers/%s", baseURL, apiKey)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {

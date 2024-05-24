@@ -62,7 +62,7 @@ func ProcessWorkers() {
 			fmt.Printf("Worker %s belongs to pool %s\n", worker.WorkerName, pool.PoolName)
 
 			for _, coin := range coins {
-				err = api.FetchHashrate(pool.PoolURL, akey, worker.WorkerName, []string{coin}, worker.ID)
+				err = api.FetchHashrate(pool.PoolURL, akey, worker.WorkerName, []string{coin}, worker.ID, pool.ID)
 				if err != nil {
 					log.Printf("Error fetching hashrate for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
 					continue
@@ -79,7 +79,7 @@ func ProcessWorkers() {
 			fmt.Printf("Worker %s belongs to pool %s\n", worker.WorkerName, pool.PoolName)
 
 			for _, coin := range coins {
-				err = api.FetchHashrate(pool.PoolURL, akey, worker.WorkerName, []string{coin}, worker.ID)
+				err = api.FetchHashrate(pool.PoolURL, akey, worker.WorkerName, []string{coin}, worker.ID, pool.ID)
 				if err != nil {
 					log.Printf("Error fetching hashrate for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
 					continue
@@ -90,7 +90,7 @@ func ProcessWorkers() {
 			fmt.Printf("Worker %s belongs to pool %s\n", worker.WorkerName, pool.PoolName)
 
 			for _, coin := range coins {
-				err = api.FetchHashrate(pool.PoolURL, akey, worker.WorkerName, []string{coin}, worker.ID)
+				err = api.FetchHashrate(pool.PoolURL, akey, worker.WorkerName, []string{coin}, worker.ID, pool.ID)
 				if err != nil {
 					log.Printf("Error fetching hashrate for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
 					continue

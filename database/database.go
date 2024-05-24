@@ -101,6 +101,21 @@ func GetPoolCoinID(poolID, coin string) (string, error) {
 	return poolCoinID, nil
 }
 
+func GetPoolCoinUUID(poolID, coinName string) (string, error) {
+	query := `
+        SELECT pc.id 
+        FROM tb_pool_coin pc
+        JOIN tb_coin c ON pc.fk_coin = c.id
+        WHERE pc.fk_pool = $1 AND c.short_name = $2
+    `
+	var poolCoinUUID string
+	err := DB.QueryRow(query, poolID, coinName).Scan(&poolCoinUUID)
+	if err != nil {
+		return "", fmt.Errorf("error fetching pool coin UUID for pool %s and coin %s: %v", poolID, coinName, err)
+	}
+	return poolCoinUUID, nil
+}
+
 func GetCoinsByPoolID(poolID string) ([]string, error) {
 	query := `SELECT c.short_name FROM tb_coin c INNER JOIN tb_pool_coin pc ON c.id = pc.fk_coin WHERE pc.fk_pool = $1`
 	rows, err := DB.Query(query, poolID)
@@ -152,6 +167,25 @@ func UpdateWorkerHashrate(workerHash models.WorkerHash) error {
 		return fmt.Errorf("failed to execute query: %v", err)
 	}
 	return nil
+}
+func GetHostsByWorkerID(workerID string) ([]models.Host, error) {
+	query := `SELECT id, host_worker FROM tb_host WHERE fk_worker = $1`
+	rows, err := DB.Query(query, workerID)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching hosts: %v", err)
+	}
+	defer rows.Close()
+
+	var hosts []models.Host
+	for rows.Next() {
+		var host models.Host
+		err := rows.Scan(&host.ID, &host.WorkerName)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning host row: %v", err)
+		}
+		hosts = append(hosts, host)
+	}
+	return hosts, nil
 }
 
 func UpdateHostHashrate(hostHash models.HostHash) error {

@@ -11,7 +11,7 @@ import (
 	"worker-service/models"
 )
 
-func FetchHashrate(baseURL, apiKey, workerName string, coins []string, workerID string) error {
+func FetchHashrate(baseURL, apiKey, accountName string, coins []string, accountID, poolID string) error {
 	for _, coin := range coins {
 		url := fmt.Sprintf("%s/v1/hashrate/worker?coin=%s", baseURL, coin)
 		client := &http.Client{}
@@ -33,6 +33,8 @@ func FetchHashrate(baseURL, apiKey, workerName string, coins []string, workerID 
 			continue
 		}
 
+		log.Printf("Response body for coin %s: %s", coin, string(body))
+
 		var hashrateData models.ViaBTCHashrateResponse
 		err = json.Unmarshal(body, &hashrateData)
 		if err != nil {
@@ -40,17 +42,37 @@ func FetchHashrate(baseURL, apiKey, workerName string, coins []string, workerID 
 			continue
 		}
 
+		hosts, err := database.GetHostsByWorkerID(accountID)
+		if err != nil {
+			log.Printf("Error fetching hosts for account %s: %v", accountName, err)
+			continue
+		}
+
 		for _, data := range hashrateData.Data.Data {
-			if data.WorkerName == workerName {
-				hostHash := models.HostHash{
-					FkHost:     workerID,
-					FkPoolCoin: coin,
-					DailyHash:  data.Hashrate24Hour,
-					HashDate:   time.Now(),
-				}
-				err := database.UpdateHostHashrate(hostHash)
-				if err != nil {
-					return fmt.Errorf("Error updating hashrate for host %s: %v", workerName, err)
+			log.Printf("Processing worker: %s, WorkerName in data: %s", accountName, data.WorkerName)
+			for _, host := range hosts {
+				if data.WorkerName == host.WorkerName {
+					poolCoinUUID, err := database.GetPoolCoinUUID(poolID, coin)
+					if err != nil {
+						log.Printf("Error fetching pool coin UUID for pool %s and coin %s: %v", poolID, coin, err)
+						continue
+					}
+
+					hostHash := models.HostHash{
+						FkHost:     host.ID,
+						FkPoolCoin: poolCoinUUID,
+						DailyHash:  data.Hashrate24Hour,
+						HashDate:   time.Now(),
+					}
+					log.Printf("Attempting to update host hashrate: %+v", hostHash)
+					err = database.UpdateHostHashrate(hostHash)
+					if err != nil {
+						log.Printf("Error updating hashrate for host %s: %v", data.WorkerName, err)
+						continue
+					}
+					log.Printf("Successfully updated hashrate for host %s", data.WorkerName)
+				} else {
+					log.Printf("WorkerName %s does not match any device of account %s", data.WorkerName, accountName)
 				}
 			}
 		}
