@@ -85,14 +85,83 @@ func GetPoolByID(poolID string) (models.Pool, error) {
 	return pool, err
 }
 
+func GetPoolCoinID(poolID, coin string) (string, error) {
+	query := `
+		SELECT pc.id
+		FROM tb_pool_coin pc
+		JOIN tb_coin c ON pc.fk_coin = c.id
+		WHERE pc.fk_pool = $1 AND c.short_name = $2
+	`
+	var poolCoinID string
+	err := DB.QueryRow(query, poolID, coin).Scan(&poolCoinID)
+	if err != nil {
+		log.Printf("Error getting poolCoinID for poolID %s and coin %s: %v", poolID, coin, err)
+		return "", err
+	}
+	return poolCoinID, nil
+}
+
+func GetCoinsByPoolID(poolID string) ([]string, error) {
+	query := `SELECT c.short_name FROM tb_coin c INNER JOIN tb_pool_coin pc ON c.id = pc.fk_coin WHERE pc.fk_pool = $1`
+	rows, err := DB.Query(query, poolID)
+	if err != nil {
+		log.Printf("Error querying coins for poolID %s: %v", poolID, err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var coins []string
+	for rows.Next() {
+		var coin string
+		err := rows.Scan(&coin)
+		if err != nil {
+			log.Printf("Error scanning coin row: %v", err)
+			return nil, err
+		}
+		coins = append(coins, coin)
+	}
+
+	if err = rows.Err(); err != nil {
+		log.Printf("Error iterating over rows: %v", err)
+		return nil, err
+	}
+
+	return coins, nil
+}
+
+func GetCoinIDByShortName(shortName string) (string, error) {
+	query := `SELECT id FROM tb_coin WHERE short_name = $1`
+	var id string
+	err := DB.QueryRow(query, shortName).Scan(&id)
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
 func UpdateWorkerHashrate(workerHash models.WorkerHash) error {
 	query := `
-        INSERT INTO tb_worker_hash (fk_worker, daily_hash, hash_date, coin)
-        VALUES ($1, $2, CURRENT_DATE, $3)
-        ON CONFLICT (fk_worker, hash_date, coin) DO UPDATE
+        INSERT INTO tb_worker_hash (fk_worker, daily_hash, hash_date, fk_pool_coin)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (fk_worker, hash_date, fk_pool_coin) DO UPDATE
         SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();
     `
-	_, err := DB.Exec(query, workerHash.FkWorker, workerHash.DailyHash, workerHash.Coin)
+	_, err := DB.Exec(query, workerHash.FkWorker, workerHash.DailyHash, workerHash.HashDate, workerHash.FkPoolCoin)
+	if err != nil {
+		log.Printf("Failed to execute query: %v", err)
+		return fmt.Errorf("failed to execute query: %v", err)
+	}
+	return nil
+}
+
+func UpdateHostHashrate(hostHash models.HostHash) error {
+	query := `
+        INSERT INTO tb_host_hash (fk_host, daily_hash, hash_date, fk_pool_coin)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (fk_host, hash_date, fk_pool_coin) DO UPDATE
+        SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();
+    `
+	_, err := DB.Exec(query, hostHash.FkHost, hostHash.DailyHash, hostHash.HashDate, hostHash.FkPoolCoin)
 	if err != nil {
 		log.Printf("Failed to execute query: %v", err)
 		return fmt.Errorf("failed to execute query: %v", err)

@@ -11,19 +11,23 @@ type Worker struct {
 }
 
 type Pool struct {
-	ID       string    `json:"id"`
-	PoolName string    `json:"pool_name"`
-	PoolURL  string    `json:"pool_url"`
-	LastEdit time.Time `json:"last_edit"`
-	Status   int       `json:"status"`
+	ID       string `json:"id"`
+	PoolName string `json:"pool_name"`
+	PoolURL  string `json:"pool_url"`
 }
 
 type WorkerHash struct {
-	ID        string    `json:"id"`
-	FkWorker  string    `json:"fk_worker"`
-	Coin      string    `json:"coin"`
-	DailyHash float64   `json:"daily_hash"`
-	LastEdit  time.Time `json:"last_edit"`
+	FkWorker   string    `json:"fk_worker"`
+	DailyHash  float64   `json:"daily_hash"`
+	HashDate   time.Time `json:"hash_date"`
+	FkPoolCoin string    `json:"fk_pool_coin"`
+}
+
+type HostHash struct {
+	FkHost     string    `json:"fk_host"`
+	DailyHash  float64   `json:"daily_hash"`
+	HashDate   time.Time `json:"hash_date"`
+	FkPoolCoin string    `json:"fk_pool_coin"`
 }
 
 type ViaBTCAccountResponse struct {
@@ -45,9 +49,7 @@ type ViaBTCHashrateResponse struct {
 }
 
 type HashrateRequest struct {
-	Currency   string `json:"currency"`
-	UserName   string `json:"user_name"`
-	WorkerName string `json:"worker_name"`
+	Currency string `json:"currency"`
 }
 
 type F2PoolWorkersInfo struct {
@@ -69,6 +71,6 @@ type F2PoolWorkersInfo struct {
 type EMCDWorkersInfo struct {
 	Data []struct {
 		Worker      string  `json:"worker"`
-		Hashrate24h float64 `json:"hashrate24h"`
+		Hashrate24h float64 `json:"hashrate_24hour"`
 	} `json:"data"`
 }

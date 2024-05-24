@@ -76,7 +76,7 @@ func saveBTCPriceToDB(price float64, timestamp time.Time) error {
 	_, err := database.DB.ExecContext(ctx, query, timestamp, price)
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok {
-			if pqErr.Code == "23505" { // UniqueViolation
+			if pqErr.Code == "23505" {
 				log.Printf("Duplicate entry detected: %v\n", err)
 				return nil
 			}

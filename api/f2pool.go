@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"net/http"
 	"time"
 	"worker-service/database"
@@ -14,37 +14,25 @@ import (
 func FetchF2PoolHashrate(baseURL, apiToken, workerName string, currencies []string, workerID string) error {
 	for _, currency := range currencies {
 		url := fmt.Sprintf("%s/hash_rate/info", baseURL)
-		reqBody, err := json.Marshal(models.HashrateRequest{Currency: currency, WorkerName: workerName})
-		if err != nil {
-			return fmt.Errorf("error marshalling request body: %v", err)
-		}
-		req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
-		if err != nil {
-			return fmt.Errorf("error creating request: %v", err)
-		}
+		reqBody, _ := json.Marshal(models.HashrateRequest{Currency: currency})
+		req, _ := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("F2P-API-SECRET", apiToken)
 
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
-			return fmt.Errorf("error sending request: %v", err)
+			fmt.Println("Error sending request:", err)
+			continue
 		}
-		defer func() {
-			if cerr := resp.Body.Close(); cerr != nil {
-				err = cerr
-			}
-		}()
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("error reading response body: %v", err)
-		}
+		defer resp.Body.Close()
+		body, _ := ioutil.ReadAll(resp.Body)
 
 		var hashRateInfo models.F2PoolWorkersInfo
 		err = json.Unmarshal(body, &hashRateInfo)
 		if err != nil {
-			return fmt.Errorf("error unmarshalling response: %v", err)
+			fmt.Println("Error unmarshalling response:", err)
+			continue
 		}
 
 		if hashRateInfo.TotalHashrate.Hashrate24h == 0 {
@@ -53,12 +41,11 @@ func FetchF2PoolHashrate(baseURL, apiToken, workerName string, currencies []stri
 		}
 
 		workerHash := models.WorkerHash{
-			FkWorker:  workerID,
-			Coin:      currency,
-			DailyHash: hashRateInfo.TotalHashrate.Hashrate24h,
-			LastEdit:  time.Now(),
+			FkWorker:   workerID,
+			FkPoolCoin: currency,
+			DailyHash:  hashRateInfo.TotalHashrate.Hashrate24h,
+			HashDate:   time.Now(),
 		}
-
 		err = database.UpdateWorkerHashrate(workerHash)
 		if err != nil {
 			return fmt.Errorf("Error updating hashrate for worker %s: %v", workerName, err)

@@ -3,7 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"net/http"
 	"time"
 	"worker-service/database"
@@ -11,7 +11,7 @@ import (
 )
 
 func FetchEMCDHashrate(baseURL, apiKey, workerName, workerID, coin string) error {
-	url := fmt.Sprintf("%s/v1/workers/%s", baseURL, apiKey)
+	url := fmt.Sprintf("%s/workers/%s", baseURL, apiKey)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return fmt.Errorf("error creating request: %v", err)
@@ -23,17 +23,13 @@ func FetchEMCDHashrate(baseURL, apiKey, workerName, workerID, coin string) error
 	if err != nil {
 		return fmt.Errorf("error sending request: %v", err)
 	}
-	defer func() {
-		if cerr := resp.Body.Close(); cerr != nil {
-			err = cerr
-		}
-	}()
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("error: status code %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("error reading response body: %v", err)
 	}
@@ -47,10 +43,10 @@ func FetchEMCDHashrate(baseURL, apiKey, workerName, workerID, coin string) error
 	for _, detail := range workersInfo.Data {
 		if detail.Worker == workerName {
 			workerHash := models.WorkerHash{
-				FkWorker:  workerID,
-				Coin:      coin,
-				DailyHash: detail.Hashrate24h,
-				LastEdit:  time.Now(),
+				FkWorker:   workerID,
+				FkPoolCoin: coin,
+				DailyHash:  detail.Hashrate24h,
+				HashDate:   time.Now(),
 			}
 			err = database.UpdateWorkerHashrate(workerHash)
 			if err != nil {

@@ -6,7 +6,6 @@ import (
 	"time"
 	"worker-service/api"
 	"worker-service/database"
-	"worker-service/utils"
 )
 
 func StartWorkerProcessor() {
@@ -43,7 +42,7 @@ func ProcessWorkers() {
 			continue
 		}
 
-		akey, skey, err := database.GetWorkerKeys(worker.ID)
+		akey, _, err := database.GetWorkerKeys(worker.ID)
 		if err != nil {
 			log.Printf("Error fetching keys for worker %s: %v\n", worker.WorkerName, err)
 			continue
@@ -51,41 +50,47 @@ func ProcessWorkers() {
 
 		fmt.Printf("Using AKey:[REDACTED] for worker %s\n", worker.WorkerName)
 
+		coins, err := database.GetCoinsByPoolID(worker.FkPool)
+		if err != nil {
+			log.Printf("Error fetching coins for worker %s: %v\n", worker.WorkerName, err)
+			continue
+		}
+		fmt.Printf("Fetched coins for worker %s: %v\n", worker.WorkerName, coins)
+
 		switch pool.PoolName {
 		case "viabtc":
 			fmt.Printf("Worker %s belongs to pool %s\n", worker.WorkerName, pool.PoolName)
 
-			fmt.Printf("Using SKey for signature: [REDACTED]\n")
-			signature := utils.CreateSignature(skey, "GET", "/res/openapi/v1/hashrate/worker", "params")
-			log.Printf("Signature created for worker %s: %s\n", worker.WorkerName, signature)
-
-			coins, err := api.FetchCoins(akey, pool.PoolURL)
-			if err != nil {
-				log.Printf("Error fetching coins for worker %s: %v\n", worker.WorkerName, err)
-				continue
+			for _, coin := range coins {
+				err = api.FetchHashrate(pool.PoolURL, akey, worker.WorkerName, []string{coin}, worker.ID)
+				if err != nil {
+					log.Printf("Error fetching hashrate for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
+					continue
+				}
 			}
-			fmt.Printf("Fetched coins for worker %s: %v\n", worker.WorkerName, coins)
 
-			err = api.FetchHashrate(pool.PoolURL, akey, worker.WorkerName, coins, worker.ID)
+			err = api.FetchAccountHashrate(pool.PoolURL, akey, coins, worker.ID, pool.ID)
 			if err != nil {
-				log.Printf("Error fetching hashrate for worker %s: %v\n", worker.WorkerName, err)
+				log.Printf("Error fetching account hashrate for worker %s: %v\n", worker.WorkerName, err)
 				continue
 			}
 
 		case "f2pool":
 			fmt.Printf("Worker %s belongs to pool %s\n", worker.WorkerName, pool.PoolName)
-			currencies := []string{"bitcoin", "bitcoin-cash", "litecoin"}
-			err = api.FetchF2PoolHashrate(pool.PoolURL, akey, worker.WorkerName, currencies, worker.ID)
-			if err != nil {
-				log.Printf("Error fetching hashrate for worker %s: %v\n", worker.WorkerName, err)
-				continue
+
+			for _, coin := range coins {
+				err = api.FetchHashrate(pool.PoolURL, akey, worker.WorkerName, []string{coin}, worker.ID)
+				if err != nil {
+					log.Printf("Error fetching hashrate for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
+					continue
+				}
 			}
 
 		case "emcd":
 			fmt.Printf("Worker %s belongs to pool %s\n", worker.WorkerName, pool.PoolName)
-			coins := []string{"BTC", "BCH", "LTC", "DASH", "ETC", "DOGE"}
+
 			for _, coin := range coins {
-				err = api.FetchEMCDHashrate(pool.PoolURL, akey, worker.WorkerName, worker.ID, coin)
+				err = api.FetchHashrate(pool.PoolURL, akey, worker.WorkerName, []string{coin}, worker.ID)
 				if err != nil {
 					log.Printf("Error fetching hashrate for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
 					continue
