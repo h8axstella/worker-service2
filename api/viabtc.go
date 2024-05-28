@@ -58,10 +58,12 @@ func FetchHashrate(baseURL, apiKey, accountName string, coins []string, accountI
 						continue
 					}
 
+					dailyHashInt := int64(data.Hashrate24Hour)
+
 					hostHash := models.HostHash{
 						FkHost:     host.ID,
 						FkPoolCoin: poolCoinUUID,
-						DailyHash:  data.Hashrate24Hour,
+						DailyHash:  dailyHashInt,
 						HashDate:   time.Now(),
 					}
 					log.Printf("Attempting to update host hashrate: %+v", hostHash)
@@ -79,7 +81,6 @@ func FetchHashrate(baseURL, apiKey, accountName string, coins []string, accountI
 	}
 	return nil
 }
-
 func FetchAccountHashrate(baseURL, apiKey string, coins []string, workerID, poolID string) error {
 	for _, coin := range coins {
 		url := fmt.Sprintf("%s/v1/hashrate?coin=%s", baseURL, coin)
@@ -105,7 +106,7 @@ func FetchAccountHashrate(baseURL, apiKey string, coins []string, workerID, pool
 		var accountHashrateData struct {
 			Code int `json:"code"`
 			Data struct {
-				Hashrate24Hour float64 `json:"hashrate_24hour,string"`
+				Hashrate24Hour int64 `json:"hashrate_24hour,string"`
 			} `json:"data"`
 			Message string `json:"message"`
 		}
@@ -120,7 +121,6 @@ func FetchAccountHashrate(baseURL, apiKey string, coins []string, workerID, pool
 			continue
 		}
 
-		// Получение poolCoinID
 		poolCoinID, err := database.GetPoolCoinID(poolID, coin)
 		if err != nil {
 			log.Printf("Coin %s does not exist in tb_pool_coin\n", coin)

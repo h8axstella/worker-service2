@@ -3,11 +3,11 @@ package models
 import "time"
 
 type Worker struct {
-	ID         string `json:"id"`
-	WorkerName string `json:"worker_name"`
-	FkPool     string `json:"fk_pool"`
-	AKey       string `json:"akey"`
-	SKey       string `json:"skey"`
+	ID         string  `json:"id"`
+	WorkerName string  `json:"worker_name"`
+	FkPool     string  `json:"fk_pool"`
+	AKey       string  `json:"akey"`
+	SKey       *string `json:"skey"`
 }
 
 type Pool struct {
@@ -18,14 +18,14 @@ type Pool struct {
 
 type WorkerHash struct {
 	FkWorker   string    `json:"fk_worker"`
-	DailyHash  float64   `json:"daily_hash"`
+	DailyHash  int64     `json:"daily_hash"`
 	HashDate   time.Time `json:"hash_date"`
 	FkPoolCoin string    `json:"fk_pool_coin"`
 }
 
 type HostHash struct {
 	FkHost     string    `json:"fk_host"`
-	DailyHash  float64   `json:"daily_hash"`
+	DailyHash  int64     `json:"daily_hash"`
 	HashDate   time.Time `json:"hash_date"`
 	FkPoolCoin string    `json:"fk_pool_coin"`
 }
@@ -74,7 +74,28 @@ type EMCDWorkersInfo struct {
 		Hashrate24h float64 `json:"hashrate_24hour"`
 	} `json:"data"`
 }
+
 type Host struct {
 	ID         string `json:"id"`
 	WorkerName string `json:"host_worker"`
+}
+
+type WorkersInfo struct {
+	TotalCount struct {
+		All      int `json:"all"`
+		Active   int `json:"active"`
+		Inactive int `json:"inactive"`
+	} `json:"total_count"`
+	TotalHashrate struct {
+		Hashrate    float64 `json:"hashrate"`
+		Hashrate1h  float64 `json:"hashrate1h"`
+		Hashrate24h float64 `json:"hashrate24h"`
+	} `json:"total_hashrate"`
+	Details []struct {
+		Worker      string  `json:"worker"`
+		Hashrate    float64 `json:"hashrate"`
+		Hashrate1h  float64 `json:"hashrate1h"`
+		Hashrate24h float64 `json:"hashrate24h"`
+		Active      int     `json:"active"`
+	} `json:"details"`
 }

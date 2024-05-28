@@ -40,10 +40,12 @@ func FetchF2PoolHashrate(baseURL, apiToken, workerName string, currencies []stri
 			continue
 		}
 
+		dailyHashInt := int64(hashRateInfo.TotalHashrate.Hashrate24h)
+
 		workerHash := models.WorkerHash{
 			FkWorker:   workerID,
 			FkPoolCoin: currency,
-			DailyHash:  hashRateInfo.TotalHashrate.Hashrate24h,
+			DailyHash:  dailyHashInt,
 			HashDate:   time.Now(),
 		}
 		err = database.UpdateWorkerHashrate(workerHash)

@@ -36,15 +36,20 @@ func Init() {
 	fmt.Println("Database connected")
 }
 
-func GetWorkerKeys(workerID string) (string, string, error) {
+func GetWorkerKeys(workerID string) (string, *string, error) {
 	query := `SELECT akey, skey FROM tb_worker WHERE id = $1`
-	var akey, skey string
+	var akey string
+	var skey sql.NullString
 	err := DB.QueryRow(query, workerID).Scan(&akey, &skey)
 	if err != nil {
 		log.Printf("Error getting worker keys for workerID %s: %v", workerID, err)
-		return "", "", err
+		return "", nil, err
 	}
-	return akey, skey, nil
+	if skey.Valid {
+		return akey, &skey.String, nil
+	} else {
+		return akey, nil, nil
+	}
 }
 
 func GetActiveWorkers() ([]models.Worker, error) {
@@ -66,9 +71,7 @@ func GetActiveWorkers() ([]models.Worker, error) {
 			return nil, err
 		}
 		if skey.Valid {
-			worker.SKey = skey.String
-		} else {
-			worker.SKey = ""
+			worker.SKey = &skey.String
 		}
 		workers = append(workers, worker)
 	}
@@ -87,39 +90,9 @@ func GetPoolByID(poolID string) (models.Pool, error) {
 	err := DB.QueryRow(query, poolID).Scan(&pool.ID, &pool.PoolName, &pool.PoolURL)
 	if err != nil {
 		log.Printf("Error getting pool by ID %s: %v", poolID, err)
+		return pool, err
 	}
-	return pool, err
-}
-
-func GetPoolCoinID(poolID, coin string) (string, error) {
-	query := `
-		SELECT pc.id
-		FROM tb_pool_coin pc
-		JOIN tb_coin c ON pc.fk_coin = c.id
-		WHERE pc.fk_pool = $1 AND c.short_name = $2
-	`
-	var poolCoinID string
-	err := DB.QueryRow(query, poolID, coin).Scan(&poolCoinID)
-	if err != nil {
-		log.Printf("Error getting poolCoinID for poolID %s and coin %s: %v", poolID, coin, err)
-		return "", err
-	}
-	return poolCoinID, nil
-}
-
-func GetPoolCoinUUID(poolID, coinName string) (string, error) {
-	query := `
-        SELECT pc.id 
-        FROM tb_pool_coin pc
-        JOIN tb_coin c ON pc.fk_coin = c.id
-        WHERE pc.fk_pool = $1 AND c.short_name = $2
-    `
-	var poolCoinUUID string
-	err := DB.QueryRow(query, poolID, coinName).Scan(&poolCoinUUID)
-	if err != nil {
-		return "", fmt.Errorf("error fetching pool coin UUID for pool %s and coin %s: %v", poolID, coinName, err)
-	}
-	return poolCoinUUID, nil
+	return pool, nil
 }
 
 func GetCoinsByPoolID(poolID string) ([]string, error) {
@@ -150,17 +123,8 @@ func GetCoinsByPoolID(poolID string) ([]string, error) {
 	return coins, nil
 }
 
-func GetCoinIDByShortName(shortName string) (string, error) {
-	query := `SELECT id FROM tb_coin WHERE short_name = $1`
-	var id string
-	err := DB.QueryRow(query, shortName).Scan(&id)
-	if err != nil {
-		return "", err
-	}
-	return id, nil
-}
-
 func UpdateWorkerHashrate(workerHash models.WorkerHash) error {
+	log.Printf("Attempting to update worker hashrate: %+v\n", workerHash)
 	query := `
         INSERT INTO tb_worker_hash (fk_worker, daily_hash, hash_date, fk_pool_coin)
         VALUES ($1, $2, $3, $4)
@@ -205,6 +169,7 @@ func GetHostsByWorkerID(workerID string) ([]models.Host, error) {
 }
 
 func UpdateHostHashrate(hostHash models.HostHash) error {
+	log.Printf("Attempting to update host hashrate: %+v\n", hostHash)
 	query := `
         INSERT INTO tb_host_hash (fk_host, daily_hash, hash_date, fk_pool_coin)
         VALUES ($1, $2, $3, $4)
@@ -226,4 +191,24 @@ func UpdateHostHashrate(hostHash models.HostHash) error {
 	}
 	log.Printf("Inserted host hash: {FkHost:%s DailyHash:%f HashDate:%s FkPoolCoin:%s}", result.FkHost, result.DailyHash, result.HashDate, result.FkPoolCoin)
 	return nil
+}
+
+func GetPoolCoinUUID(poolID, coin string) (string, error) {
+	query := `
+		SELECT pc.id
+		FROM tb_pool_coin pc
+		JOIN tb_coin c ON pc.fk_coin = c.id
+		WHERE pc.fk_pool = $1 AND c.short_name = $2
+	`
+	var poolCoinID string
+	err := DB.QueryRow(query, poolID, coin).Scan(&poolCoinID)
+	if err != nil {
+		log.Printf("Error getting poolCoinID for poolID %s and coin %s: %v", poolID, coin, err)
+		return "", err
+	}
+	return poolCoinID, nil
+}
+
+func GetPoolCoinID(poolID, coin string) (string, error) {
+	return GetPoolCoinUUID(poolID, coin)
 }
