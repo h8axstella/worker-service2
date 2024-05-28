@@ -59,10 +59,16 @@ func GetActiveWorkers() ([]models.Worker, error) {
 	var workers []models.Worker
 	for rows.Next() {
 		var worker models.Worker
-		err := rows.Scan(&worker.ID, &worker.WorkerName, &worker.AKey, &worker.SKey, &worker.FkPool)
+		var skey sql.NullString
+		err := rows.Scan(&worker.ID, &worker.WorkerName, &worker.AKey, &skey, &worker.FkPool)
 		if err != nil {
 			log.Printf("Error scanning worker row: %v", err)
 			return nil, err
+		}
+		if skey.Valid {
+			worker.SKey = skey.String
+		} else {
+			worker.SKey = ""
 		}
 		workers = append(workers, worker)
 	}
@@ -166,8 +172,18 @@ func UpdateWorkerHashrate(workerHash models.WorkerHash) error {
 		log.Printf("Failed to execute query: %v", err)
 		return fmt.Errorf("failed to execute query: %v", err)
 	}
+
+	var result models.WorkerHash
+	err = DB.QueryRow("SELECT fk_worker, daily_hash, hash_date, fk_pool_coin FROM tb_worker_hash WHERE fk_worker = $1 AND hash_date = $2 AND fk_pool_coin = $3",
+		workerHash.FkWorker, workerHash.HashDate, workerHash.FkPoolCoin).Scan(&result.FkWorker, &result.DailyHash, &result.HashDate, &result.FkPoolCoin)
+	if err != nil {
+		log.Printf("Failed to fetch inserted data: %v", err)
+		return fmt.Errorf("failed to fetch inserted data: %v", err)
+	}
+	log.Printf("Inserted worker hash: {FkWorker:%s DailyHash:%f HashDate:%s FkPoolCoin:%s}", result.FkWorker, result.DailyHash, result.HashDate, result.FkPoolCoin)
 	return nil
 }
+
 func GetHostsByWorkerID(workerID string) ([]models.Host, error) {
 	query := `SELECT id, host_worker FROM tb_host WHERE fk_worker = $1`
 	rows, err := DB.Query(query, workerID)
@@ -200,5 +216,14 @@ func UpdateHostHashrate(hostHash models.HostHash) error {
 		log.Printf("Failed to execute query: %v", err)
 		return fmt.Errorf("failed to execute query: %v", err)
 	}
+
+	var result models.HostHash
+	err = DB.QueryRow("SELECT fk_host, daily_hash, hash_date, fk_pool_coin FROM tb_host_hash WHERE fk_host = $1 AND hash_date = $2 AND fk_pool_coin = $3",
+		hostHash.FkHost, hostHash.HashDate, hostHash.FkPoolCoin).Scan(&result.FkHost, &result.DailyHash, &result.HashDate, &result.FkPoolCoin)
+	if err != nil {
+		log.Printf("Failed to fetch inserted data: %v", err)
+		return fmt.Errorf("failed to fetch inserted data: %v", err)
+	}
+	log.Printf("Inserted host hash: {FkHost:%s DailyHash:%f HashDate:%s FkPoolCoin:%s}", result.FkHost, result.DailyHash, result.HashDate, result.FkPoolCoin)
 	return nil
 }
