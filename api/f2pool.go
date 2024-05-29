@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"time"
 	"worker-service/database"
@@ -12,21 +12,34 @@ import (
 )
 
 func FetchF2PoolHashrate(baseURL, apiToken, workerName string, currencies []string, workerID string) error {
+	client := &http.Client{}
 	for _, currency := range currencies {
 		url := fmt.Sprintf("%s/hash_rate/info", baseURL)
-		reqBody, _ := json.Marshal(models.HashrateRequest{Currency: currency})
-		req, _ := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
+		reqBody, err := json.Marshal(models.HashrateRequest{Currency: currency})
+		if err != nil {
+			fmt.Println("Error marshalling request body:", err)
+			continue
+		}
+		req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
+		if err != nil {
+			fmt.Println("Error creating request:", err)
+			continue
+		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("F2P-API-SECRET", apiToken)
 
-		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
 			fmt.Println("Error sending request:", err)
 			continue
 		}
-		defer resp.Body.Close()
-		body, _ := ioutil.ReadAll(resp.Body)
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			fmt.Println("Error reading response body:", err)
+			continue
+		}
 
 		var hashRateInfo models.F2PoolWorkersInfo
 		err = json.Unmarshal(body, &hashRateInfo)
@@ -41,16 +54,16 @@ func FetchF2PoolHashrate(baseURL, apiToken, workerName string, currencies []stri
 		}
 
 		dailyHashInt := int64(hashRateInfo.TotalHashrate.Hashrate24h)
-
 		workerHash := models.WorkerHash{
 			FkWorker:   workerID,
 			FkPoolCoin: currency,
 			DailyHash:  dailyHashInt,
 			HashDate:   time.Now(),
 		}
+
 		err = database.UpdateWorkerHashrate(workerHash)
 		if err != nil {
-			return fmt.Errorf("Error updating hashrate for worker %s: %v", workerName, err)
+			return fmt.Errorf("error updating hashrate for worker %s: %v", workerName, err)
 		}
 	}
 	return nil

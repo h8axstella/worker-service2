@@ -155,41 +155,37 @@ func GetHostsByWorkerID(workerID string) ([]models.Host, error) {
 		return nil, fmt.Errorf("error fetching hosts: %v", err)
 	}
 	defer rows.Close()
-
 	var hosts []models.Host
 	for rows.Next() {
 		var host models.Host
-		err := rows.Scan(&host.ID, &host.WorkerName)
-		if err != nil {
+		if err := rows.Scan(&host.ID, &host.WorkerName); err != nil {
 			return nil, fmt.Errorf("error scanning host row: %v", err)
 		}
 		hosts = append(hosts, host)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over rows: %v", err)
+	}
 	return hosts, nil
 }
-
 func UpdateHostHashrate(hostHash models.HostHash) error {
 	log.Printf("Attempting to update host hashrate: %+v\n", hostHash)
 	query := `
         INSERT INTO tb_host_hash (fk_host, daily_hash, hash_date, fk_pool_coin)
         VALUES ($1, $2, $3, $4)
-        ON CONFLICT (fk_host, hash_date, fk_pool_coin) DO UPDATE
+        ON CONFLICT (fk_host, hash_date, fk_pool_coin) DO UPDATE 
         SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();
     `
 	_, err := DB.Exec(query, hostHash.FkHost, hostHash.DailyHash, hostHash.HashDate, hostHash.FkPoolCoin)
 	if err != nil {
-		log.Printf("Failed to execute query: %v", err)
 		return fmt.Errorf("failed to execute query: %v", err)
 	}
-
 	var result models.HostHash
-	err = DB.QueryRow("SELECT fk_host, daily_hash, hash_date, fk_pool_coin FROM tb_host_hash WHERE fk_host = $1 AND hash_date = $2 AND fk_pool_coin = $3",
-		hostHash.FkHost, hostHash.HashDate, hostHash.FkPoolCoin).Scan(&result.FkHost, &result.DailyHash, &result.HashDate, &result.FkPoolCoin)
+	err = DB.QueryRow("SELECT fk_host, daily_hash, hash_date, fk_pool_coin FROM tb_host_hash WHERE fk_host = $1 AND hash_date = $2 AND fk_pool_coin = $3", hostHash.FkHost, hostHash.HashDate, hostHash.FkPoolCoin).Scan(&result.FkHost, &result.DailyHash, &result.HashDate, &result.FkPoolCoin)
 	if err != nil {
-		log.Printf("Failed to fetch inserted data: %v", err)
 		return fmt.Errorf("failed to fetch inserted data: %v", err)
 	}
-	log.Printf("Inserted host hash: {FkHost:%s DailyHash:%f HashDate:%s FkPoolCoin:%s}", result.FkHost, result.DailyHash, result.HashDate, result.FkPoolCoin)
+	log.Printf("Inserted worker hash: {FkHost:%s DailyHash:%d HashDate:%s FkPoolCoin:%s}", result.FkHost, result.DailyHash, result.HashDate, result.FkPoolCoin)
 	return nil
 }
 

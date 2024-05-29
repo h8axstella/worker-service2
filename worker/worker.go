@@ -101,6 +101,7 @@ func ProcessWorkers() {
 				log.Printf("Total Hashrate (1h): %f\n", workersInfo.TotalHashrate.Hashrate1h)
 				log.Printf("Total Hashrate (24h): %f\n", workersInfo.TotalHashrate.Hashrate24h)
 
+				// Получаем poolCoinID для текущей монеты
 				poolCoinID, err := database.GetPoolCoinUUID(pool.ID, coin)
 				if err != nil {
 					log.Printf("Error fetching pool coin UUID for pool %s and coin %s: %v", pool.ID, coin, err)
@@ -124,9 +125,9 @@ func ProcessWorkers() {
 							log.Printf("Inserting worker hash for worker %s", detail.Worker)
 							workerHash := models.WorkerHash{
 								FkWorker:   worker.ID,
-								DailyHash:  dailyHashInt,
+								FkPoolCoin: poolCoinID,                                   // правильный ID монеты
+								DailyHash:  int64(workersInfo.TotalHashrate.Hashrate24h), // использование общего хэшрейта
 								HashDate:   time.Now(),
-								FkPoolCoin: poolCoinID,
 							}
 							err = database.UpdateWorkerHashrate(workerHash)
 							if err != nil {
@@ -138,7 +139,7 @@ func ProcessWorkers() {
 								FkHost:     host.ID,
 								DailyHash:  dailyHashInt,
 								HashDate:   time.Now(),
-								FkPoolCoin: poolCoinID,
+								FkPoolCoin: poolCoinID, // правильный ID монеты
 							}
 							err = database.UpdateHostHashrate(hostHash)
 							if err != nil {
@@ -150,6 +151,17 @@ func ProcessWorkers() {
 					if !matchFound {
 						log.Printf("WorkerName %s does not match any device of account %s", detail.Worker, worker.WorkerName)
 					}
+				}
+				// Сохранение общего хэшрейта в tb_worker_hash
+				totalWorkerHash := models.WorkerHash{
+					FkWorker:   worker.ID,
+					FkPoolCoin: poolCoinID,
+					DailyHash:  int64(workersInfo.TotalHashrate.Hashrate24h),
+					HashDate:   time.Now(),
+				}
+				err = database.UpdateWorkerHashrate(totalWorkerHash)
+				if err != nil {
+					log.Printf("Error updating total hashrate for worker %s: %v", worker.WorkerName, err)
 				}
 			}
 		}
