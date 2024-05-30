@@ -33,9 +33,9 @@ func FetchF2PoolHashrate(baseURL, apiToken, workerName string, currencies []stri
 			fmt.Println("Error sending request:", err)
 			continue
 		}
+		defer resp.Body.Close()
 
 		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
 		if err != nil {
 			fmt.Println("Error reading response body:", err)
 			continue

@@ -25,12 +25,14 @@ func FetchHashrate(baseURL, apiKey, accountName string, coins []string, accountI
 			log.Printf("Error fetching hashrate for coin %s: %v", coin, err)
 			continue
 		}
+		defer response.Body.Close()
+
 		body, err := io.ReadAll(response.Body)
-		response.Body.Close()
 		if err != nil {
 			log.Printf("Error reading response body for coin %s: %v", coin, err)
 			continue
 		}
+
 		log.Printf("Response body for coin %s: %s", coin, string(body))
 		var hashrateData models.ViaBTCHashrateResponse
 		err = json.Unmarshal(body, &hashrateData)
@@ -38,11 +40,13 @@ func FetchHashrate(baseURL, apiKey, accountName string, coins []string, accountI
 			log.Printf("Error unmarshalling response body for coin %s: %v", coin, err)
 			continue
 		}
+
 		hosts, err := database.GetHostsByWorkerID(accountID)
 		if err != nil {
 			log.Printf("Error fetching hosts for account %s: %v", accountName, err)
 			continue
 		}
+
 		for _, data := range hashrateData.Data.Data {
 			log.Printf("Processing worker: %s, WorkerName in data: %s", accountName, data.WorkerName)
 			for _, host := range hosts {
@@ -89,12 +93,14 @@ func FetchAccountHashrate(baseURL, apiKey string, coins []string, workerID, pool
 			log.Printf("Error fetching account hashrate for coin %s: %v", coin, err)
 			continue
 		}
+		defer response.Body.Close()
+
 		body, err := io.ReadAll(response.Body)
-		response.Body.Close()
 		if err != nil {
 			log.Printf("Error reading response body for account hashrate for coin %s: %v", coin, err)
 			continue
 		}
+
 		var accountHashrateData struct {
 			Code int `json:"code"`
 			Data struct {
