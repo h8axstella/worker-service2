@@ -41,39 +41,36 @@ func FetchHashrate(baseURL, apiKey, accountName string, coins []string, accountI
 			continue
 		}
 
-		hosts, err := database.GetHostsByWorkerID(accountID)
-		if err != nil {
-			log.Printf("Error fetching hosts for account %s: %v", accountName, err)
-			continue
-		}
-
 		for _, data := range hashrateData.Data.Data {
 			log.Printf("Processing worker: %s, WorkerName in data: %s", accountName, data.WorkerName)
-			for _, host := range hosts {
-				if data.WorkerName == host.WorkerName {
-					poolCoinUUID, err := database.GetPoolCoinUUID(poolID, coin)
-					if err != nil {
-						log.Printf("Error fetching pool coin UUID for pool %s and coin %s: %v", poolID, coin, err)
-						continue
-					}
-					dailyHashInt := int64(data.Hashrate24Hour)
-					hostHash := models.HostHash{
-						FkHost:     host.ID,
-						FkPoolCoin: poolCoinUUID,
-						DailyHash:  dailyHashInt,
-						HashDate:   time.Now(),
-					}
-					log.Printf("Attempting to update host hashrate: %+v", hostHash)
-					err = database.UpdateHostHashrate(hostHash)
-					if err != nil {
-						log.Printf("Error updating hashrate for host %s: %v", data.WorkerName, err)
-						continue
-					}
-					log.Printf("Successfully updated hashrate for host %s", data.WorkerName)
-				} else {
-					log.Printf("WorkerName %s does not match any device of account %s", data.WorkerName, accountName)
-				}
+
+			// Check if WorkerName exists in the database
+			host, err := database.GetHostByWorkerName(data.WorkerName)
+			if err != nil {
+				log.Printf("WorkerName %s does not match any device of account %s", data.WorkerName, accountName)
+				continue
 			}
+
+			poolCoinUUID, err := database.GetPoolCoinUUID(poolID, coin)
+			if err != nil {
+				log.Printf("Error fetching pool coin UUID for pool %s and coin %s: %v", poolID, coin, err)
+				continue
+			}
+
+			dailyHashInt := int64(data.Hashrate24Hour)
+			hostHash := models.HostHash{
+				FkHost:     host.ID,
+				FkPoolCoin: poolCoinUUID,
+				DailyHash:  dailyHashInt,
+				HashDate:   time.Now(),
+			}
+			log.Printf("Attempting to update host hashrate: %+v", hostHash)
+			err = database.UpdateHostHashrate(hostHash)
+			if err != nil {
+				log.Printf("Error updating hashrate for host %s: %v", data.WorkerName, err)
+				continue
+			}
+			log.Printf("Successfully updated hashrate for host %s", data.WorkerName)
 		}
 	}
 	return nil

@@ -83,6 +83,18 @@ func GetActiveWorkers() ([]models.Worker, error) {
 
 	return workers, nil
 }
+func GetHostByWorkerName(workerName string) (models.Host, error) {
+	query := `SELECT id, host_worker FROM tb_host WHERE host_worker = $1`
+	var host models.Host
+	err := DB.QueryRow(query, workerName).Scan(&host.ID, &host.WorkerName)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return host, fmt.Errorf("no host found with WorkerName: %s", workerName)
+		}
+		return host, fmt.Errorf("error fetching host: %v", err)
+	}
+	return host, nil
+}
 
 func GetPoolByID(poolID string) (models.Pool, error) {
 	query := `SELECT id, pool_name, pool_url FROM tb_pool WHERE id = $1`
