@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 	"worker-service/database"
 	"worker-service/models"
@@ -51,9 +52,14 @@ func FetchHashrate(baseURL, apiKey, accountName string, coins []string, accountI
 				continue
 			}
 
+			log.Printf("Calling GetPoolCoinUUID with poolID: %s and coin: %s", poolID, coin)
 			poolCoinUUID, err := database.GetPoolCoinUUID(poolID, coin)
 			if err != nil {
 				log.Printf("Error fetching pool coin UUID for pool %s and coin %s: %v", poolID, coin, err)
+				continue
+			}
+			if poolCoinUUID == "" {
+				log.Printf("PoolCoinUUID is empty for pool %s and coin %s", poolID, coin)
 				continue
 			}
 
@@ -62,7 +68,7 @@ func FetchHashrate(baseURL, apiKey, accountName string, coins []string, accountI
 				FkHost:     host.ID,
 				FkPoolCoin: poolCoinUUID,
 				DailyHash:  dailyHashInt,
-				HashDate:   time.Now(),
+				HashDate:   time.Now().Format("2006-01-02"),
 			}
 			log.Printf("Attempting to update host hashrate: %+v", hostHash)
 			err = database.UpdateHostHashrate(hostHash)
@@ -76,60 +82,90 @@ func FetchHashrate(baseURL, apiKey, accountName string, coins []string, accountI
 	return nil
 }
 
-func FetchAccountHashrate(baseURL, apiKey string, coins []string, workerID, poolID string) error {
-	for _, coin := range coins {
-		url := fmt.Sprintf("%s/v1/hashrate?coin=%s", baseURL, coin)
+func FetchAccountHashrateHistory(baseURL, apiKey, coin, startDate, endDate string) ([]models.AccountHashrateHistory, error) {
+	var allData []models.AccountHashrateHistory
+	page := 1
+
+	for {
+		url := fmt.Sprintf("%s/v1/hashrate/history?coin=%s&start_date=%s&end_date=%s&page=%d", strings.TrimRight(baseURL, "/"), coin, startDate, endDate, page)
 		client := &http.Client{}
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
-			return fmt.Errorf("error creating request for account hashrate for coin %s: %v", coin, err)
+			return nil, fmt.Errorf("error creating request for coin %s: %v", coin, err)
 		}
 		req.Header.Add("X-API-KEY", apiKey)
 		response, err := client.Do(req)
 		if err != nil {
-			log.Printf("Error fetching account hashrate for coin %s: %v", coin, err)
-			continue
+			log.Printf("Error fetching account hashrate history for coin %s: %v", coin, err)
+			return nil, err
 		}
 		defer response.Body.Close()
 
 		body, err := io.ReadAll(response.Body)
 		if err != nil {
-			log.Printf("Error reading response body for account hashrate for coin %s: %v", coin, err)
-			continue
+			log.Printf("Error reading response body for coin %s: %v", coin, err)
+			return nil, err
 		}
 
-		var accountHashrateData struct {
-			Code int `json:"code"`
-			Data struct {
-				Hashrate24Hour int64 `json:"hashrate_24hour,string"`
-			} `json:"data"`
-			Message string `json:"message"`
-		}
-		err = json.Unmarshal(body, &accountHashrateData)
+		log.Printf("Response body for coin %s: %s", coin, string(body))
+		var hashrateHistoryResponse models.AccountHashrateHistoryResponse
+		err = json.Unmarshal(body, &hashrateHistoryResponse)
 		if err != nil {
-			log.Printf("Error unmarshalling response body for account hashrate for coin %s: %v", coin, err)
-			continue
+			log.Printf("Error unmarshalling response body for coin %s: %v", coin, err)
+			return nil, err
 		}
-		if accountHashrateData.Data.Hashrate24Hour == 0 {
-			log.Printf("API error for account hashrate for coin %s: no data available\n", coin)
-			continue
+
+		allData = append(allData, hashrateHistoryResponse.Data.Data...)
+
+		if !hashrateHistoryResponse.Data.HasNext {
+			break
 		}
-		poolCoinID, err := database.GetPoolCoinID(poolID, coin)
-		if err != nil {
-			log.Printf("Coin %s does not exist in tb_pool_coin\n", coin)
-			continue
-		}
-		workerHash := models.WorkerHash{
-			FkWorker:   workerID,
-			FkPoolCoin: poolCoinID,
-			DailyHash:  accountHashrateData.Data.Hashrate24Hour,
-			HashDate:   time.Now(),
-		}
-		log.Printf("Updating worker hashrate with: %+v\n", workerHash)
-		err = database.UpdateWorkerHashrate(workerHash)
-		if err != nil {
-			return fmt.Errorf("error updating account hashrate for worker %s: %v", workerID, err)
-		}
+		page++
 	}
-	return nil
+
+	return allData, nil
+}
+
+func FetchWorkerHashrateHistory(baseURL, apiKey, workerName, coin, startDate, endDate string) ([]models.WorkerHashrateHistory, error) {
+	var allData []models.WorkerHashrateHistory
+	page := 1
+
+	for {
+		url := fmt.Sprintf("%s/v1/hashrate/worker/%s/history?coin=%s&start_date=%s&end_date=%s&page=%d", strings.TrimRight(baseURL, "/"), workerName, coin, startDate, endDate, page)
+		log.Printf("Fetching worker hashrate history with URL: %s", url) // Логирование URL
+		client := &http.Client{}
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("error creating request for worker %s and coin %s: %v", workerName, coin, err)
+		}
+		req.Header.Add("X-API-KEY", apiKey)
+		response, err := client.Do(req)
+		if err != nil {
+			log.Printf("Error fetching worker hashrate history for worker %s and coin %s: %v", workerName, coin)
+			return nil, err
+		}
+		defer response.Body.Close()
+		body, err := io.ReadAll(response.Body)
+		if err != nil {
+			log.Printf("Error reading response body for worker %s and coin %s: %v", workerName, coin, err)
+			return nil, err
+		}
+
+		log.Printf("Response body for worker %s and coin %s: %s", workerName, coin, string(body))
+		var hashrateHistoryResponse models.WorkerHashrateHistoryResponse
+		err = json.Unmarshal(body, &hashrateHistoryResponse)
+		if err != nil {
+			log.Printf("Error unmarshalling response body for worker %s and coin %s: %v", workerName, coin, err)
+			return nil, err
+		}
+
+		allData = append(allData, hashrateHistoryResponse.Data.Data...)
+
+		if !hashrateHistoryResponse.Data.HasNext {
+			break
+		}
+		page++
+	}
+
+	return allData, nil
 }

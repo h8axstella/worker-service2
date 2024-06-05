@@ -1,7 +1,5 @@
 package models
 
-import "time"
-
 type Worker struct {
 	ID         string  `json:"id"`
 	WorkerName string  `json:"worker_name"`
@@ -17,17 +15,17 @@ type Pool struct {
 }
 
 type WorkerHash struct {
-	FkWorker   string    `json:"fk_worker"`
-	DailyHash  int64     `json:"daily_hash"`
-	HashDate   time.Time `json:"hash_date"`
-	FkPoolCoin string    `json:"fk_pool_coin"`
+	FkWorker   string
+	FkPoolCoin string
+	DailyHash  int64
+	HashDate   string
 }
 
 type HostHash struct {
-	FkHost     string    `json:"fk_host"`
-	DailyHash  int64     `json:"daily_hash"`
-	HashDate   time.Time `json:"hash_date"`
-	FkPoolCoin string    `json:"fk_pool_coin"`
+	FkHost     string
+	FkPoolCoin string
+	DailyHash  int64
+	HashDate   string
 }
 
 type ViaBTCAccountResponse struct {
@@ -98,4 +96,50 @@ type WorkersInfo struct {
 		Hashrate24h float64 `json:"hashrate24h"`
 		Active      int     `json:"active"`
 	} `json:"details"`
+}
+
+type AccountHashrateHistory struct {
+	Coin       string `json:"coin"`
+	Date       string `json:"date"`
+	Hashrate   int64  `json:"hashrate,string"`
+	RejectRate string `json:"reject_rate"`
+	PoolCoinID string
+}
+
+type AccountHashrateHistoryResponse struct {
+	Code    int                        `json:"code"`
+	Data    AccountHashrateHistoryData `json:"data"`
+	Message string                     `json:"message"`
+}
+
+type AccountHashrateHistoryData struct {
+	Count     int                      `json:"count"`
+	CurrPage  int                      `json:"curr_page"`
+	Data      []AccountHashrateHistory `json:"data"`
+	HasNext   bool                     `json:"has_next"`
+	Total     int                      `json:"total"`
+	TotalPage int                      `json:"total_page"`
+}
+
+type WorkerHashrateHistory struct {
+	Coin       string `json:"coin"`
+	Date       string `json:"date"`
+	Hashrate   int64  `json:"hashrate,string"`
+	RejectRate string `json:"reject_rate"`
+	PoolCoinID string
+}
+
+type WorkerHashrateHistoryResponse struct {
+	Code    int                       `json:"code"`
+	Data    WorkerHashrateHistoryData `json:"data"`
+	Message string                    `json:"message"`
+}
+
+type WorkerHashrateHistoryData struct {
+	Count     int                     `json:"count"`
+	CurrPage  int                     `json:"curr_page"`
+	Data      []WorkerHashrateHistory `json:"data"`
+	HasNext   bool                    `json:"has_next"`
+	Total     int                     `json:"total"`
+	TotalPage int                     `json:"total_page"`
 }
