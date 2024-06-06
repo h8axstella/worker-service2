@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 	"worker-service/database"
@@ -63,7 +64,12 @@ func FetchHashrate(baseURL, apiKey, accountName string, coins []string, accountI
 				continue
 			}
 
-			dailyHashInt := int64(data.Hashrate24Hour)
+			dailyHashInt, err := strconv.ParseInt(data.Hashrate24Hour, 10, 64)
+			if err != nil {
+				log.Printf("Error converting hashrate to int64 for worker %s and coin %s: %v", data.WorkerName, coin, err)
+				continue
+			}
+
 			hostHash := models.HostHash{
 				FkHost:     host.ID,
 				FkPoolCoin: poolCoinUUID,
@@ -157,6 +163,10 @@ func FetchWorkerHashrateHistory(baseURL, apiKey string, workerID int, coin, star
 		if err != nil {
 			log.Printf("Error unmarshalling response body for worker %d and coin %s: %v", workerID, coin, err)
 			return nil, err
+		}
+
+		for i := range hashrateHistoryResponse.Data.Data {
+			hashrateHistoryResponse.Data.Data[i].Hashrate = strings.Split(hashrateHistoryResponse.Data.Data[i].Hashrate, ".")[0]
 		}
 
 		allData = append(allData, hashrateHistoryResponse.Data.Data...)

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 	"worker-service/api"
 	"worker-service/database"
@@ -72,10 +73,15 @@ func ProcessWorkers(startDate, endDate string) {
 						log.Printf("Error fetching PoolCoinID for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
 						continue
 					}
+					hashrateInt, err := strconv.ParseInt(history.Hashrate, 10, 64)
+					if err != nil {
+						log.Printf("Error converting hashrate to int64 for worker %s and coin %s: %v", worker.WorkerName, coin, err)
+						continue
+					}
 					accountHash := models.WorkerHash{
 						FkWorker:   worker.ID,
 						FkPoolCoin: poolCoinID,
-						DailyHash:  history.Hashrate,
+						DailyHash:  hashrateInt,
 						HashDate:   history.Date,
 					}
 					err = database.UpdateWorkerHashrate(accountHash)
@@ -123,10 +129,15 @@ func ProcessWorkers(startDate, endDate string) {
 								log.Printf("Error fetching PoolCoinID for worker %s and coin %s: %v\n", host.WorkerName, coin, err)
 								continue
 							}
+							hashrateInt, err := strconv.ParseInt(history.Hashrate, 10, 64)
+							if err != nil {
+								log.Printf("Error converting hashrate to int64 for worker %s and coin %s: %v", host.WorkerName, coin, err)
+								continue
+							}
 							hostHash := models.HostHash{
 								FkHost:     host.ID,
 								FkPoolCoin: poolCoinID,
-								DailyHash:  history.Hashrate,
+								DailyHash:  hashrateInt,
 								HashDate:   history.Date,
 							}
 							err = database.UpdateHostHashrate(hostHash)

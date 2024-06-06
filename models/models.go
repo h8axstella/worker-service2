@@ -42,8 +42,8 @@ type ViaBTCHashrateResponse struct {
 	Code int `json:"code"`
 	Data struct {
 		Data []struct {
-			Hashrate24Hour float64 `json:"hashrate_24hour,string"`
-			WorkerName     string  `json:"worker_name"`
+			Hashrate24Hour string `json:"hashrate_24hour"`
+			WorkerName     string `json:"worker_name"`
 		} `json:"data"`
 	} `json:"data"`
 }
@@ -104,7 +104,7 @@ type WorkersInfo struct {
 type AccountHashrateHistory struct {
 	Coin       string `json:"coin"`
 	Date       string `json:"date"`
-	Hashrate   int64  `json:"hashrate,string"`
+	Hashrate   string `json:"hashrate"`
 	RejectRate string `json:"reject_rate"`
 	PoolCoinID string
 }
@@ -127,7 +127,7 @@ type AccountHashrateHistoryData struct {
 type WorkerHashrateHistory struct {
 	Coin       string `json:"coin"`
 	Date       string `json:"date"`
-	Hashrate   int64  `json:"hashrate,string"`
+	Hashrate   string `json:"hashrate"`
 	RejectRate string `json:"reject_rate"`
 	PoolCoinID string
 }
@@ -147,22 +147,15 @@ type WorkerHashrateHistoryData struct {
 	TotalPage int                     `json:"total_page"`
 }
 
-type WorkerListResponse struct {
-	Code    int            `json:"code"`
-	Data    WorkerListData `json:"data"`
-	Message string         `json:"message"`
-}
-
-type WorkerListData struct {
-	Count     int              `json:"count"`
-	CurrPage  int              `json:"curr_page"`
-	Data      []WorkerListItem `json:"data"`
-	HasNext   bool             `json:"has_next"`
-	Total     int              `json:"total"`
-	TotalPage int              `json:"total_page"`
-}
-
 type WorkerListItem struct {
 	WorkerID   int    `json:"worker_id"`
 	WorkerName string `json:"worker_name"`
+}
+
+type WorkerListResponse struct {
+	Code int `json:"code"`
+	Data struct {
+		Data    []WorkerListItem `json:"data"`
+		HasNext bool             `json:"has_next"`
+	} `json:"data"`
 }
