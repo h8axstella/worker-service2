@@ -85,9 +85,9 @@ func GetActiveWorkers() ([]models.Worker, error) {
 }
 
 func GetHostByWorkerName(workerName string) (models.Host, error) {
-	query := `SELECT id, host_worker FROM tb_host WHERE host_worker = $1`
+	query := `SELECT id, host_worker, host_workerid FROM tb_host WHERE host_worker = $1`
 	var host models.Host
-	err := DB.QueryRow(query, workerName).Scan(&host.ID, &host.WorkerName)
+	err := DB.QueryRow(query, workerName).Scan(&host.ID, &host.WorkerName, &host.HostWorkerID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return host, fmt.Errorf("no host found with WorkerName: %s", workerName)
@@ -177,7 +177,7 @@ func UpdateHostHashrate(hostHash models.HostHash) error {
 }
 
 func GetHostsByWorkerID(workerID string) ([]models.Host, error) {
-	query := `SELECT id, host_worker FROM tb_host WHERE fk_worker = $1`
+	query := `SELECT id, host_worker, host_workerid FROM tb_host WHERE fk_worker = $1`
 	rows, err := DB.Query(query, workerID)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching hosts: %v", err)
@@ -186,7 +186,7 @@ func GetHostsByWorkerID(workerID string) ([]models.Host, error) {
 	var hosts []models.Host
 	for rows.Next() {
 		var host models.Host
-		if err := rows.Scan(&host.ID, &host.WorkerName); err != nil {
+		if err := rows.Scan(&host.ID, &host.WorkerName, &host.HostWorkerID); err != nil {
 			return nil, fmt.Errorf("error scanning host row: %v", err)
 		}
 		hosts = append(hosts, host)
@@ -211,4 +211,13 @@ func GetPoolCoinUUID(poolID, coin string) (string, error) {
 		return "", err
 	}
 	return poolCoinID, nil
+}
+
+func UpdateHostWorkerID(hostWorkerID int, hostID string) error {
+	query := `UPDATE tb_host SET host_workerid = $1 WHERE id = $2`
+	_, err := DB.Exec(query, hostWorkerID, hostID)
+	if err != nil {
+		return fmt.Errorf("error updating host worker_id: %v", err)
+	}
+	return nil
 }

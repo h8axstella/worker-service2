@@ -126,42 +126,86 @@ func FetchAccountHashrateHistory(baseURL, apiKey, coin, startDate, endDate strin
 	return allData, nil
 }
 
-func FetchWorkerHashrateHistory(baseURL, apiKey, workerName, coin, startDate, endDate string) ([]models.WorkerHashrateHistory, error) {
+func FetchWorkerHashrateHistory(baseURL, apiKey string, workerID int, coin, startDate, endDate string) ([]models.WorkerHashrateHistory, error) {
 	var allData []models.WorkerHashrateHistory
 	page := 1
 
 	for {
-		url := fmt.Sprintf("%s/v1/hashrate/worker/%s/history?coin=%s&start_date=%s&end_date=%s&page=%d", strings.TrimRight(baseURL, "/"), workerName, coin, startDate, endDate, page)
+		url := fmt.Sprintf("%s/v1/hashrate/worker/%d/history?coin=%s&start_date=%s&end_date=%s&page=%d", strings.TrimRight(baseURL, "/"), workerID, coin, startDate, endDate, page)
 		log.Printf("Fetching worker hashrate history with URL: %s", url) // Логирование URL
 		client := &http.Client{}
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
-			return nil, fmt.Errorf("error creating request for worker %s and coin %s: %v", workerName, coin, err)
+			return nil, fmt.Errorf("error creating request for worker %d and coin %s: %v", workerID, coin, err)
 		}
 		req.Header.Add("X-API-KEY", apiKey)
 		response, err := client.Do(req)
 		if err != nil {
-			log.Printf("Error fetching worker hashrate history for worker %s and coin %s: %v", workerName, coin)
+			log.Printf("Error fetching worker hashrate history for worker %d and coin %s: %v", workerID, coin)
 			return nil, err
 		}
 		defer response.Body.Close()
 		body, err := io.ReadAll(response.Body)
 		if err != nil {
-			log.Printf("Error reading response body for worker %s and coin %s: %v", workerName, coin, err)
+			log.Printf("Error reading response body for worker %d and coin %s: %v", workerID, coin, err)
 			return nil, err
 		}
 
-		log.Printf("Response body for worker %s and coin %s: %s", workerName, coin, string(body))
+		log.Printf("Response body for worker %d and coin %s: %s", workerID, coin, string(body))
 		var hashrateHistoryResponse models.WorkerHashrateHistoryResponse
 		err = json.Unmarshal(body, &hashrateHistoryResponse)
 		if err != nil {
-			log.Printf("Error unmarshalling response body for worker %s and coin %s: %v", workerName, coin, err)
+			log.Printf("Error unmarshalling response body for worker %d and coin %s: %v", workerID, coin, err)
 			return nil, err
 		}
 
 		allData = append(allData, hashrateHistoryResponse.Data.Data...)
 
 		if !hashrateHistoryResponse.Data.HasNext {
+			break
+		}
+		page++
+	}
+
+	return allData, nil
+}
+
+func FetchWorkerList(baseURL, apiKey, coin string) ([]models.WorkerListItem, error) {
+	var allData []models.WorkerListItem
+	page := 1
+
+	for {
+		url := fmt.Sprintf("%s/v1/hashrate/worker?coin=%s&page=%d", strings.TrimRight(baseURL, "/"), coin, page)
+		client := &http.Client{}
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("error creating request for coin %s: %v", coin, err)
+		}
+		req.Header.Add("X-API-KEY", apiKey)
+		response, err := client.Do(req)
+		if err != nil {
+			log.Printf("Error fetching worker list for coin %s: %v", coin, err)
+			return nil, err
+		}
+		defer response.Body.Close()
+
+		body, err := io.ReadAll(response.Body)
+		if err != nil {
+			log.Printf("Error reading response body for coin %s: %v", coin, err)
+			return nil, err
+		}
+
+		log.Printf("Response body for coin %s: %s", coin, string(body))
+		var workerListResponse models.WorkerListResponse
+		err = json.Unmarshal(body, &workerListResponse)
+		if err != nil {
+			log.Printf("Error unmarshalling response body for coin %s: %v", coin, err)
+			return nil, err
+		}
+
+		allData = append(allData, workerListResponse.Data.Data...)
+
+		if !workerListResponse.Data.HasNext {
 			break
 		}
 		page++

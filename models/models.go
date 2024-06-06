@@ -1,5 +1,7 @@
 package models
 
+import "database/sql"
+
 type Worker struct {
 	ID         string  `json:"id"`
 	WorkerName string  `json:"worker_name"`
@@ -74,8 +76,9 @@ type EMCDWorkersInfo struct {
 }
 
 type Host struct {
-	ID         string `json:"id"`
-	WorkerName string `json:"host_worker"`
+	ID           string        `json:"id"`
+	WorkerName   string        `json:"host_worker"`
+	HostWorkerID sql.NullInt64 `json:"host_workerid"`
 }
 
 type WorkersInfo struct {
@@ -142,4 +145,24 @@ type WorkerHashrateHistoryData struct {
 	HasNext   bool                    `json:"has_next"`
 	Total     int                     `json:"total"`
 	TotalPage int                     `json:"total_page"`
+}
+
+type WorkerListResponse struct {
+	Code    int            `json:"code"`
+	Data    WorkerListData `json:"data"`
+	Message string         `json:"message"`
+}
+
+type WorkerListData struct {
+	Count     int              `json:"count"`
+	CurrPage  int              `json:"curr_page"`
+	Data      []WorkerListItem `json:"data"`
+	HasNext   bool             `json:"has_next"`
+	Total     int              `json:"total"`
+	TotalPage int              `json:"total_page"`
+}
+
+type WorkerListItem struct {
+	WorkerID   int    `json:"worker_id"`
+	WorkerName string `json:"worker_name"`
 }
