@@ -1,9 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"worker-service/config"
-	"worker-service/course"
 	"worker-service/database"
 	"worker-service/worker"
 )
@@ -17,8 +17,7 @@ func main() {
 		endDate := os.Args[2]
 		worker.ProcessWorkers(startDate, endDate)
 	} else {
-		go worker.StartWorkerProcessor()
-		go course.ScheduleBTCProcessing()
-		select {}
+		fmt.Println("Usage: worker-service <start-date> <end-date>")
+		os.Exit(1)
 	}
 }

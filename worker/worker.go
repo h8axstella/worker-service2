@@ -5,27 +5,10 @@ import (
 	"fmt"
 	"log"
 	"strconv"
-	"time"
 	"worker-service/api"
 	"worker-service/database"
 	"worker-service/models"
 )
-
-func StartWorkerProcessor() {
-	ticker := time.NewTicker(24 * time.Hour)
-	defer ticker.Stop()
-	log.Printf("Starting initial worker processing at %s\n", time.Now())
-	ProcessWorkers("2024-05-01", "2024-05-31")
-	log.Printf("Initial worker processing completed at %s\n", time.Now())
-	for {
-		select {
-		case <-ticker.C:
-			log.Printf("Starting worker processing at %s\n", time.Now())
-			ProcessWorkers("", "")
-			log.Printf("Worker processing completed at %s\n", time.Now())
-		}
-	}
-}
 
 func ProcessWorkers(startDate, endDate string) {
 	fmt.Println("Fetching active workers...")
