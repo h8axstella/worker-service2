@@ -10,7 +10,7 @@ import (
 func main() {
 	config.InitConfig()
 	database.Init()
-	go worker.StartWorkerProcessor()
+	go worker.StartWorkerHashrateProcessor()
 	go course.ScheduleBTCProcessing()
 	select {}
 }

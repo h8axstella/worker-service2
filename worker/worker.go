@@ -9,23 +9,23 @@ import (
 	"worker-service/models"
 )
 
-func StartWorkerProcessor() {
+func StartWorkerHashrateProcessor() {
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 	log.Printf("Starting initial worker processing at %s\n", time.Now())
-	ProcessWorkers()
+	ProcessActiveWorkers()
 	log.Printf("Initial worker processing completed at %s\n", time.Now())
 	for {
 		select {
 		case <-ticker.C:
 			log.Printf("Starting worker processing at %s\n", time.Now())
-			ProcessWorkers()
+			ProcessActiveWorkers()
 			log.Printf("Worker processing completed at %s\n", time.Now())
 		}
 	}
 }
 
-func ProcessWorkers() {
+func ProcessActiveWorkers() {
 	fmt.Println("Fetching active workers...")
 
 	workers, err := database.GetActiveWorkers()
@@ -63,14 +63,14 @@ func ProcessWorkers() {
 			fmt.Printf("Worker %s belongs to pool %s\n", worker.WorkerName, pool.PoolName)
 
 			for _, coin := range coins {
-				err = api.FetchHashrate(pool.PoolURL, akey, worker.WorkerName, []string{coin}, worker.ID, pool.ID)
+				err = api.FetchWorkerHashrate(pool.PoolURL, akey, worker.WorkerName, []string{coin}, worker.ID, pool.ID)
 				if err != nil {
 					log.Printf("Error fetching hashrate for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
 					continue
 				}
 			}
 
-			err = api.FetchAccountHashrate(pool.PoolURL, akey, coins, worker.ID, pool.ID)
+			err = api.FetchOverallAccountHashrate(pool.PoolURL, akey, coins, worker.ID, pool.ID)
 			if err != nil {
 				log.Printf("Error fetching account hashrate for worker %s: %v\n", worker.WorkerName, err)
 				continue
@@ -80,7 +80,7 @@ func ProcessWorkers() {
 			fmt.Printf("Worker %s belongs to pool %s\n", worker.WorkerName, pool.PoolName)
 
 			for _, coin := range coins {
-				err = api.FetchHashrate(pool.PoolURL, akey, worker.WorkerName, []string{coin}, worker.ID, pool.ID)
+				err = api.FetchWorkerHashrate(pool.PoolURL, akey, worker.WorkerName, []string{coin}, worker.ID, pool.ID)
 				if err != nil {
 					log.Printf("Error fetching hashrate for worker %s и coin %s: %v\n", worker.WorkerName, coin, err)
 					continue

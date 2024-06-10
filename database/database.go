@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -83,12 +84,13 @@ func GetActiveWorkers() ([]models.Worker, error) {
 
 	return workers, nil
 }
+
 func GetHostByWorkerName(workerName string) (models.Host, error) {
 	query := `SELECT id, host_worker FROM tb_host WHERE host_worker = $1`
 	var host models.Host
 	err := DB.QueryRow(query, workerName).Scan(&host.ID, &host.WorkerName)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return host, fmt.Errorf("no host found with WorkerName: %s", workerName)
 		}
 		return host, fmt.Errorf("error fetching host: %v", err)
@@ -150,13 +152,12 @@ func UpdateWorkerHashrate(workerHash models.WorkerHash) error {
 	}
 
 	var result models.WorkerHash
-	err = DB.QueryRow("SELECT fk_worker, daily_hash, hash_date, fk_pool_coin FROM tb_worker_hash WHERE fk_worker = $1 AND hash_date = $2 AND fk_pool_coin = $3",
-		workerHash.FkWorker, workerHash.HashDate, workerHash.FkPoolCoin).Scan(&result.FkWorker, &result.DailyHash, &result.HashDate, &result.FkPoolCoin)
+	err = DB.QueryRow("SELECT fk_worker, daily_hash, hash_date, fk_pool_coin FROM tb_worker_hash WHERE fk_worker = $1 AND hash_date = $2 AND fk_pool_coin = $3", workerHash.FkWorker, workerHash.HashDate, workerHash.FkPoolCoin).Scan(&result.FkWorker, &result.DailyHash, &result.HashDate, &result.FkPoolCoin)
 	if err != nil {
 		log.Printf("Failed to fetch inserted data: %v", err)
 		return fmt.Errorf("failed to fetch inserted data: %v", err)
 	}
-	log.Printf("Inserted worker hash: {FkWorker:%s DailyHash:%f HashDate:%s FkPoolCoin:%s}", result.FkWorker, result.DailyHash, result.HashDate, result.FkPoolCoin)
+	log.Printf("Inserted worker hash: {FkWorker:%s DailyHash:%d HashDate:%s FkPoolCoin:%s}", result.FkWorker, result.DailyHash, result.HashDate, result.FkPoolCoin)
 	return nil
 }
 

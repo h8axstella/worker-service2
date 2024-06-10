@@ -39,9 +39,11 @@ type ViaBTCAccountResponse struct {
 }
 
 type ViaBTCHashrateResponse struct {
-	Code int `json:"code"`
-	Data struct {
-		Data []struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    struct {
+		TotalPages int `json:"total_page"`
+		Data       []struct {
 			Hashrate24Hour float64 `json:"hashrate_24hour,string"`
 			WorkerName     string  `json:"worker_name"`
 		} `json:"data"`
