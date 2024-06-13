@@ -11,6 +11,7 @@ import (
 )
 
 func StartWorkerHashrateProcessor(semaphore chan struct{}, maxRetryAttempts int) {
+	fmt.Println("Worker hashrate processor started...")
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 	log.Printf("Starting initial worker processing at %s\n", time.Now())
