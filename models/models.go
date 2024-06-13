@@ -30,6 +30,14 @@ type HostHash struct {
 	FkPoolCoin string    `json:"fk_pool_coin"`
 }
 
+type UnidentHash struct {
+	HashDate    time.Time `json:"hash_date"`
+	DailyHash   int64     `json:"daily_hash"`
+	UnidentName string    `json:"unident_name"`
+	FkWorker    string    `json:"fk_worker"`
+	FkPoolCoin  string    `json:"fk_pool_coin"`
+}
+
 type ViaBTCAccountResponse struct {
 	Data struct {
 		Balance []struct {

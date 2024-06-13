@@ -181,6 +181,7 @@ func GetHostsByWorkerID(workerID string) ([]models.Host, error) {
 	}
 	return hosts, nil
 }
+
 func UpdateHostHashrate(hostHash models.HostHash) error {
 	log.Printf("Attempting to update host hashrate: %+v\n", hostHash)
 	query := `
@@ -198,7 +199,7 @@ func UpdateHostHashrate(hostHash models.HostHash) error {
 	if err != nil {
 		return fmt.Errorf("failed to fetch inserted data: %v", err)
 	}
-	log.Printf("Inserted worker hash: {FkHost:%s DailyHash:%d HashDate:%s FkPoolCoin:%s}", result.FkHost, result.DailyHash, result.HashDate, result.FkPoolCoin)
+	log.Printf("Inserted host hash: {FkHost:%s DailyHash:%d HashDate:%s FkPoolCoin:%s}", result.FkHost, result.DailyHash, result.HashDate, result.FkPoolCoin)
 	return nil
 }
 
@@ -218,6 +219,17 @@ func GetPoolCoinUUID(poolID, coin string) (string, error) {
 	return poolCoinID, nil
 }
 
-func GetPoolCoinID(poolID, coin string) (string, error) {
-	return GetPoolCoinUUID(poolID, coin)
+func InsertUnidentHash(unidentHash models.UnidentHash) error {
+	query := `
+		INSERT INTO tb_unident_hash (hash_date, daily_hash, unident_name, fk_worker, fk_pool_coin)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (hash_date, unident_name, fk_worker, fk_pool_coin) DO UPDATE
+		SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();
+	`
+	_, err := DB.Exec(query, unidentHash.HashDate, unidentHash.DailyHash, unidentHash.UnidentName, unidentHash.FkWorker, unidentHash.FkPoolCoin)
+	if err != nil {
+		log.Printf("Error inserting unident hash: %v", err)
+		return fmt.Errorf("failed to insert unident hash: %v", err)
+	}
+	return nil
 }

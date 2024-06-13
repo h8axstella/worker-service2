@@ -5,27 +5,28 @@ import (
 	"log"
 	"time"
 	"worker-service/api"
+	"worker-service/common"
 	"worker-service/database"
 	"worker-service/models"
 )
 
-func StartWorkerHashrateProcessor() {
+func StartWorkerHashrateProcessor(semaphore chan struct{}, maxRetryAttempts int) {
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 	log.Printf("Starting initial worker processing at %s\n", time.Now())
-	ProcessActiveWorkers()
+	ProcessActiveWorkers(semaphore, maxRetryAttempts)
 	log.Printf("Initial worker processing completed at %s\n", time.Now())
 	for {
 		select {
 		case <-ticker.C:
 			log.Printf("Starting worker processing at %s\n", time.Now())
-			ProcessActiveWorkers()
+			ProcessActiveWorkers(semaphore, maxRetryAttempts)
 			log.Printf("Worker processing completed at %s\n", time.Now())
 		}
 	}
 }
 
-func ProcessActiveWorkers() {
+func ProcessActiveWorkers(semaphore chan struct{}, maxRetryAttempts int) {
 	fmt.Println("Fetching active workers...")
 
 	workers, err := database.GetActiveWorkers()
@@ -63,14 +64,20 @@ func ProcessActiveWorkers() {
 			fmt.Printf("Worker %s belongs to pool %s\n", worker.WorkerName, pool.PoolName)
 
 			for _, coin := range coins {
-				err = api.FetchWorkerHashrate(pool.PoolURL, akey, worker.WorkerName, []string{coin}, worker.ID, pool.ID)
+				semaphore <- struct{}{}
+				err = common.Retry(maxRetryAttempts, 2, func() error {
+					return api.FetchWorkerHashrate(pool.PoolURL, akey, worker.WorkerName, []string{coin}, worker.ID, pool.ID)
+				})
+				<-semaphore
 				if err != nil {
 					log.Printf("Error fetching hashrate for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
 					continue
 				}
 			}
 
-			err = api.FetchOverallAccountHashrate(pool.PoolURL, akey, coins, worker.ID, pool.ID)
+			err = common.Retry(maxRetryAttempts, 2, func() error {
+				return api.FetchOverallAccountHashrate(pool.PoolURL, akey, coins, worker.ID, pool.ID)
+			})
 			if err != nil {
 				log.Printf("Error fetching account hashrate for worker %s: %v\n", worker.WorkerName, err)
 				continue
@@ -80,7 +87,11 @@ func ProcessActiveWorkers() {
 			fmt.Printf("Worker %s belongs to pool %s\n", worker.WorkerName, pool.PoolName)
 
 			for _, coin := range coins {
-				err = api.FetchWorkerHashrate(pool.PoolURL, akey, worker.WorkerName, []string{coin}, worker.ID, pool.ID)
+				semaphore <- struct{}{}
+				err = common.Retry(maxRetryAttempts, 2, func() error {
+					return api.FetchWorkerHashrate(pool.PoolURL, akey, worker.WorkerName, []string{coin}, worker.ID, pool.ID)
+				})
+				<-semaphore
 				if err != nil {
 					log.Printf("Error fetching hashrate for worker %s и coin %s: %v\n", worker.WorkerName, coin, err)
 					continue
@@ -90,7 +101,9 @@ func ProcessActiveWorkers() {
 		case "emcd":
 			fmt.Printf("Worker %s belongs to pool %s\n", worker.WorkerName, pool.PoolName)
 			for _, coin := range coins {
+				semaphore <- struct{}{}
 				workersInfo, err := api.GetEmcdWorkersInfo(akey, coin, pool.PoolURL)
+				<-semaphore
 				if err != nil {
 					log.Printf("Error fetching workers info for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
 					continue
