@@ -138,6 +138,23 @@ func GetCoinsByPoolID(poolID string) ([]string, error) {
 	return coins, nil
 }
 
+func GetWorkerByName(workerName string) (models.Worker, error) {
+	query := `SELECT id, worker_name, akey, skey, fk_pool FROM tb_worker WHERE worker_name = $1`
+	var worker models.Worker
+	var skey sql.NullString
+	err := DB.QueryRow(query, workerName).Scan(&worker.ID, &worker.WorkerName, &worker.AKey, &skey, &worker.FkPool)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return worker, fmt.Errorf("no worker found with WorkerName: %s", workerName)
+		}
+		return worker, fmt.Errorf("error fetching worker: %v", err)
+	}
+	if skey.Valid {
+		worker.SKey = &skey.String
+	}
+	return worker, nil
+}
+
 func UpdateWorkerHashrate(workerHash models.WorkerHash) error {
 	query := `
         INSERT INTO tb_worker_hash (fk_worker, daily_hash, hash_date, fk_pool_coin)
