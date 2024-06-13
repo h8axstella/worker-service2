@@ -55,11 +55,12 @@ func ProcessWorkers(workerName, startDate, endDate string) {
 					log.Printf("Error fetching PoolCoinID for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
 					continue
 				}
-				hashrateInt, err := strconv.ParseInt(history.Hashrate, 10, 64)
+				hashrateFloat, err := strconv.ParseFloat(history.Hashrate, 64)
 				if err != nil {
-					log.Printf("Error converting hashrate to int64 for worker %s and coin %s: %v", worker.WorkerName, coin, err)
+					log.Printf("Error converting hashrate to float64 for worker %s and coin %s: %v", worker.WorkerName, coin, err)
 					continue
 				}
+				hashrateInt := int64(hashrateFloat) // Преобразование float64 в int64
 				accountHash := models.WorkerHash{
 					FkWorker:   worker.ID,
 					FkPoolCoin: poolCoinID,
@@ -111,11 +112,12 @@ func ProcessWorkers(workerName, startDate, endDate string) {
 							log.Printf("Error fetching PoolCoinID for worker %s and coin %s: %v\n", host.WorkerName, coin, err)
 							continue
 						}
-						hashrateInt, err := strconv.ParseInt(history.Hashrate, 10, 64)
+						hashrateFloat, err := strconv.ParseFloat(history.Hashrate, 64)
 						if err != nil {
-							log.Printf("Error converting hashrate to int64 for worker %s and coin %s: %v", host.WorkerName, coin, err)
+							log.Printf("Error converting hashrate to float64 for worker %s and coin %s: %v", host.WorkerName, coin, err)
 							continue
 						}
+						hashrateInt := int64(hashrateFloat)
 						hostHash := models.HostHash{
 							FkHost:     host.ID,
 							FkPoolCoin: poolCoinID,
