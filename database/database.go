@@ -2,7 +2,6 @@ package database
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -30,11 +29,19 @@ func Init() {
 		log.Fatalf("Failed to connect to DB: %v", err)
 	}
 
+	DB.SetMaxOpenConns(20)
+	DB.SetMaxIdleConns(5)
+	DB.SetConnMaxLifetime(0)
+
 	err = DB.Ping()
 	if err != nil {
 		log.Fatalf("Failed to ping database: %v", err)
 	}
 	fmt.Println("Database connected")
+}
+
+func Close() {
+	DB.Close()
 }
 
 func GetWorkerKeys(workerID string) (string, *string, error) {
@@ -85,19 +92,6 @@ func GetActiveWorkers() ([]models.Worker, error) {
 	return workers, nil
 }
 
-func GetHostByWorkerName(workerName string) (models.Host, error) {
-	query := `SELECT id, host_worker FROM tb_host WHERE host_worker = $1`
-	var host models.Host
-	err := DB.QueryRow(query, workerName).Scan(&host.ID, &host.WorkerName)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return host, fmt.Errorf("no host found with WorkerName: %s", workerName)
-		}
-		return host, fmt.Errorf("error fetching host: %v", err)
-	}
-	return host, nil
-}
-
 func GetPoolByID(poolID string) (models.Pool, error) {
 	query := `SELECT id, pool_name, pool_url FROM tb_pool WHERE id = $1`
 	var pool models.Pool
@@ -135,6 +129,19 @@ func GetCoinsByPoolID(poolID string) ([]string, error) {
 	}
 
 	return coins, nil
+}
+
+func GetHostByWorkerName(workerName string) (models.Host, error) {
+	query := `SELECT id, host_worker FROM tb_host WHERE host_worker = $1`
+	var host models.Host
+	err := DB.QueryRow(query, workerName).Scan(&host.ID, &host.WorkerName)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return host, fmt.Errorf("no host found with WorkerName: %s", workerName)
+		}
+		return host, fmt.Errorf("error fetching host: %v", err)
+	}
+	return host, nil
 }
 
 func UpdateWorkerHashrate(workerHash models.WorkerHash) error {
@@ -205,11 +212,11 @@ func UpdateHostHashrate(hostHash models.HostHash) error {
 
 func GetPoolCoinUUID(poolID, coin string) (string, error) {
 	query := `
-		SELECT pc.id
-		FROM tb_pool_coin pc
-		JOIN tb_coin c ON pc.fk_coin = c.id
-		WHERE pc.fk_pool = $1 AND c.short_name = $2
-	`
+        SELECT pc.id
+        FROM tb_pool_coin pc
+        JOIN tb_coin c ON pc.fk_coin = c.id
+        WHERE pc.fk_pool = $1 AND c.short_name = $2
+    `
 	var poolCoinID string
 	err := DB.QueryRow(query, poolID, coin).Scan(&poolCoinID)
 	if err != nil {
@@ -221,11 +228,11 @@ func GetPoolCoinUUID(poolID, coin string) (string, error) {
 
 func InsertUnidentHash(unidentHash models.UnidentHash) error {
 	query := `
-		INSERT INTO tb_unident_hash (hash_date, daily_hash, unident_name, fk_worker, fk_pool_coin)
-		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (hash_date, unident_name, fk_worker, fk_pool_coin) DO UPDATE
-		SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();
-	`
+        INSERT INTO tb_unident_hash (hash_date, daily_hash, unident_name, fk_worker, fk_pool_coin)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (hash_date, unident_name, fk_worker, fk_pool_coin) DO UPDATE
+        SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();
+    `
 	_, err := DB.Exec(query, unidentHash.HashDate, unidentHash.DailyHash, unidentHash.UnidentName, unidentHash.FkWorker, unidentHash.FkPoolCoin)
 	if err != nil {
 		log.Printf("Error inserting unident hash: %v", err)

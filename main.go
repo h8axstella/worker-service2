@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"time"
-	"worker-service/common"
 	"worker-service/config"
 	"worker-service/course"
 	"worker-service/database"
@@ -16,6 +15,7 @@ func main() {
 	config.InitConfig()
 	fmt.Println("Initializing database...")
 	database.Init()
+	defer database.Close()
 	fmt.Println("Database connected")
 
 	logDir := "logs"
@@ -51,12 +51,13 @@ func startWorkers() {
 
 	fmt.Println("Inside startWorkers function...")
 	logger.InfoLogger.Println("Starting worker hashrate processing...")
-	semaphore := make(chan struct{}, common.MaxConcurrentRequests)
+	apiSemaphore := make(chan struct{}, 100)
+	dbSemaphore := make(chan struct{}, 20)
 	done := make(chan bool)
 
 	go func() {
 		fmt.Println("Starting worker hashrate processor...")
-		worker.StartWorkerHashrateProcessor(semaphore, common.MaxRetryAttempts)
+		worker.StartWorkerHashrateProcessor(apiSemaphore, dbSemaphore, 3)
 		done <- true
 	}()
 	go func() {
@@ -65,7 +66,6 @@ func startWorkers() {
 		done <- true
 	}()
 
-	// Wait for both tasks to complete
 	<-done
 	<-done
 
