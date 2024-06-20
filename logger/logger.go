@@ -8,9 +8,10 @@ import (
 )
 
 var (
-	InfoLogger    *log.Logger
-	WarningLogger *log.Logger
-	ErrorLogger   *log.Logger
+	InfoLogger     *log.Logger
+	WarningLogger  *log.Logger
+	ErrorLogger    *log.Logger
+	DurationLogger *log.Logger
 )
 
 func Init(logDir string) {
@@ -36,4 +37,10 @@ func Init(logDir string) {
 		log.Fatalf("Failed to open error log file: %v", err)
 	}
 	ErrorLogger = log.New(io.MultiWriter(os.Stdout, errorLogFile), "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
+
+	durationLogFile, err := os.OpenFile(filepath.Join(logDir, "duration.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("Failed to open duration log file: %v", err)
+	}
+	DurationLogger = log.New(io.MultiWriter(os.Stdout, durationLogFile), "DURATION: ", log.Ldate|log.Ltime)
 }

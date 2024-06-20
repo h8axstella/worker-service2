@@ -44,15 +44,38 @@ func scheduleDailyTask() {
 }
 
 func startWorkers() {
+	startTime := time.Now()
+	fmt.Printf("Task started at: %v\n", startTime)
+	logger.InfoLogger.Printf("Task started at: %v\n", startTime)
+	logger.DurationLogger.Printf("Task started at: %v\n", startTime)
+
 	fmt.Println("Inside startWorkers function...")
 	logger.InfoLogger.Println("Starting worker hashrate processing...")
 	semaphore := make(chan struct{}, common.MaxConcurrentRequests)
+	done := make(chan bool)
+
 	go func() {
 		fmt.Println("Starting worker hashrate processor...")
 		worker.StartWorkerHashrateProcessor(semaphore, common.MaxRetryAttempts)
+		done <- true
 	}()
 	go func() {
 		fmt.Println("Scheduling BTC processing...")
 		course.ScheduleBTCProcessing()
+		done <- true
 	}()
+
+	// Wait for both tasks to complete
+	<-done
+	<-done
+
+	endTime := time.Now()
+	fmt.Printf("Task ended at: %v\n", endTime)
+	logger.InfoLogger.Printf("Task ended at: %v\n", endTime)
+	logger.DurationLogger.Printf("Task ended at: %v\n", endTime)
+
+	duration := endTime.Sub(startTime)
+	fmt.Printf("Task duration: %v\n", duration)
+	logger.InfoLogger.Printf("Task duration: %v\n", duration)
+	logger.DurationLogger.Printf("Task duration: %v\n", duration)
 }
