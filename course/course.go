@@ -3,6 +3,7 @@ package course
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/lib/pq"
 	"io"
@@ -75,7 +76,7 @@ func saveBTCPriceToDB(price float64, timestamp time.Time) error {
 	query := "INSERT INTO tb_btc_rate (rate_date, rate) VALUES ($1, $2)"
 	_, err := database.DB.ExecContext(ctx, query, timestamp, price)
 	if err != nil {
-		if pqErr, ok := err.(*pq.Error); ok {
+		if pqErr := new(pq.Error); errors.As(err, &pqErr) {
 			if pqErr.Code == "23505" {
 				log.Printf("Duplicate entry detected: %v\n", err)
 				return nil

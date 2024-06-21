@@ -1,6 +1,6 @@
 package models
 
-import "database/sql"
+import "time"
 
 type Worker struct {
 	ID         string  `json:"id"`
@@ -17,17 +17,25 @@ type Pool struct {
 }
 
 type WorkerHash struct {
-	FkWorker   string
-	FkPoolCoin string
-	DailyHash  int64
-	HashDate   string
+	FkWorker   string    `json:"fk_worker"`
+	DailyHash  int64     `json:"daily_hash"`
+	HashDate   time.Time `json:"hash_date"`
+	FkPoolCoin string    `json:"fk_pool_coin"`
 }
 
 type HostHash struct {
-	FkHost     string
-	FkPoolCoin string
-	DailyHash  int64
-	HashDate   string
+	FkHost     string    `json:"fk_host"`
+	DailyHash  int64     `json:"daily_hash"`
+	HashDate   time.Time `json:"hash_date"`
+	FkPoolCoin string    `json:"fk_pool_coin"`
+}
+
+type UnidentHash struct {
+	HashDate    time.Time `json:"hash_date"`
+	DailyHash   int64     `json:"daily_hash"`
+	UnidentName string    `json:"unident_name"`
+	FkWorker    string    `json:"fk_worker"`
+	FkPoolCoin  string    `json:"fk_pool_coin"`
 }
 
 type ViaBTCAccountResponse struct {
@@ -39,11 +47,13 @@ type ViaBTCAccountResponse struct {
 }
 
 type ViaBTCHashrateResponse struct {
-	Code int `json:"code"`
-	Data struct {
-		Data []struct {
-			Hashrate24Hour string `json:"hashrate_24hour"`
-			WorkerName     string `json:"worker_name"`
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    struct {
+		TotalPages int `json:"total_page"`
+		Data       []struct {
+			Hashrate24Hour float64 `json:"hashrate_24hour,string"`
+			WorkerName     string  `json:"worker_name"`
 		} `json:"data"`
 	} `json:"data"`
 }
@@ -76,9 +86,8 @@ type EMCDWorkersInfo struct {
 }
 
 type Host struct {
-	ID           string        `json:"id"`
-	WorkerName   string        `json:"host_worker"`
-	HostWorkerID sql.NullInt64 `json:"host_workerid"`
+	ID         string `json:"id"`
+	WorkerName string `json:"host_worker"`
 }
 
 type WorkersInfo struct {
@@ -99,63 +108,4 @@ type WorkersInfo struct {
 		Hashrate24h float64 `json:"hashrate24h"`
 		Active      int     `json:"active"`
 	} `json:"details"`
-}
-
-type AccountHashrateHistory struct {
-	Coin       string `json:"coin"`
-	Date       string `json:"date"`
-	Hashrate   string `json:"hashrate"`
-	RejectRate string `json:"reject_rate"`
-	PoolCoinID string
-}
-
-type AccountHashrateHistoryResponse struct {
-	Code    int                        `json:"code"`
-	Data    AccountHashrateHistoryData `json:"data"`
-	Message string                     `json:"message"`
-}
-
-type AccountHashrateHistoryData struct {
-	Count     int                      `json:"count"`
-	CurrPage  int                      `json:"curr_page"`
-	Data      []AccountHashrateHistory `json:"data"`
-	HasNext   bool                     `json:"has_next"`
-	Total     int                      `json:"total"`
-	TotalPage int                      `json:"total_page"`
-}
-
-type WorkerHashrateHistory struct {
-	Coin       string `json:"coin"`
-	Date       string `json:"date"`
-	Hashrate   string `json:"hashrate"`
-	RejectRate string `json:"reject_rate"`
-	PoolCoinID string
-}
-
-type WorkerHashrateHistoryResponse struct {
-	Code    int                       `json:"code"`
-	Data    WorkerHashrateHistoryData `json:"data"`
-	Message string                    `json:"message"`
-}
-
-type WorkerHashrateHistoryData struct {
-	Count     int                     `json:"count"`
-	CurrPage  int                     `json:"curr_page"`
-	Data      []WorkerHashrateHistory `json:"data"`
-	HasNext   bool                    `json:"has_next"`
-	Total     int                     `json:"total"`
-	TotalPage int                     `json:"total_page"`
-}
-
-type WorkerListItem struct {
-	WorkerID   int    `json:"worker_id"`
-	WorkerName string `json:"worker_name"`
-}
-
-type WorkerListResponse struct {
-	Code int `json:"code"`
-	Data struct {
-		Data    []WorkerListItem `json:"data"`
-		HasNext bool             `json:"has_next"`
-	} `json:"data"`
 }

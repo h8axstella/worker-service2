@@ -4,251 +4,247 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
+	"worker-service/common"
 	"worker-service/database"
+	"worker-service/logger"
 	"worker-service/models"
 )
 
-func FetchHashrate(baseURL, apiKey, accountName string, coins []string, accountID, poolID string) error {
+func FetchWorkerHashrate(baseURL, apiKey, accountName string, coins []string, accountID, poolID string) error {
 	var wg sync.WaitGroup
-	hashrateChan := make(chan models.HostHash, len(coins))
-	errorChan := make(chan error, len(coins))
+	semaphore := make(chan struct{}, common.MaxConcurrentRequests)
 
 	for _, coin := range coins {
 		wg.Add(1)
 		go func(coin string) {
 			defer wg.Done()
-			url := fmt.Sprintf("%s/v1/hashrate/worker?coin=%s", baseURL, coin)
-			client := &http.Client{}
+
+			totalPages, err := getTotalPages(baseURL, apiKey, coin)
+			if err != nil {
+				logger.ErrorLogger.Printf("Error getting total pages for coin %s: %v", coin, err)
+				return
+			}
+
+			for page := 1; page <= totalPages; page++ {
+				wg.Add(1)
+				go func(page int) {
+					defer wg.Done()
+					semaphore <- struct{}{}
+
+					err := common.Retry(common.MaxRetryAttempts, 2, func() error {
+						return fetchPageData(baseURL, apiKey, coin, accountName, accountID, poolID, page)
+					})
+					if err != nil {
+						logger.ErrorLogger.Printf("Failed to fetch page %d for coin %s after %d attempts: %v", page, coin, common.MaxRetryAttempts, err)
+					}
+
+					<-semaphore
+				}(page)
+			}
+		}(coin)
+	}
+	wg.Wait()
+	return nil
+}
+
+func fetchPageData(baseURL, apiKey, coin, accountName, accountID, poolID string, page int) error {
+	url := fmt.Sprintf("%s/v1/hashrate/worker?coin=%s&page=%d", baseURL, coin, page)
+	client := &http.Client{
+		Transport: &http.Transport{
+			MaxIdleConns:        common.MaxConcurrentRequests,
+			MaxIdleConnsPerHost: common.MaxConcurrentRequests,
+		},
+	}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("error creating request for coin %s: %v", coin, err)
+	}
+	req.Header.Add("X-API-KEY", apiKey)
+	response, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("error fetching hashrate for coin %s: %v", coin, err)
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return fmt.Errorf("error reading response body for coin %s: %v", coin, err)
+	}
+
+	logger.InfoLogger.Printf("Response body for coin %s: %s", coin, string(body))
+	var hashrateData models.ViaBTCHashrateResponse
+	err = json.Unmarshal(body, &hashrateData)
+	if err != nil {
+		return fmt.Errorf("error unmarshalling response body for coin %s: %v", coin, err)
+	}
+
+	for _, data := range hashrateData.Data.Data {
+		logger.InfoLogger.Printf("Processing worker: %s, WorkerName in data: %s", accountName, data.WorkerName)
+
+		host, err := database.GetHostByWorkerName(data.WorkerName)
+		if err != nil {
+			logger.WarningLogger.Printf("WorkerName %s does not match any device of account %s", data.WorkerName, accountName)
+			poolCoinUUID, err := database.GetPoolCoinUUID(poolID, coin)
+			if err != nil {
+				logger.ErrorLogger.Printf("Error fetching pool coin UUID for pool %s and coin %s: %v", poolID, coin, err)
+				continue
+			}
+			unidentHash := models.UnidentHash{
+				HashDate:    time.Now(),
+				DailyHash:   int64(data.Hashrate24Hour),
+				UnidentName: data.WorkerName,
+				FkWorker:    accountID,
+				FkPoolCoin:  poolCoinUUID,
+			}
+			err = database.InsertUnidentHash(unidentHash)
+			if err != nil {
+				logger.ErrorLogger.Printf("Error inserting unident hash for worker %s: %v", data.WorkerName, err)
+			}
+			continue
+		}
+
+		poolCoinUUID, err := database.GetPoolCoinUUID(poolID, coin)
+		if err != nil {
+			logger.ErrorLogger.Printf("Error fetching pool coin UUID for pool %s and coin %s: %v", poolID, coin, err)
+			continue
+		}
+
+		dailyHashInt := int64(data.Hashrate24Hour)
+		hostHash := models.HostHash{
+			FkHost:     host.ID,
+			FkPoolCoin: poolCoinUUID,
+			DailyHash:  dailyHashInt,
+			HashDate:   time.Now(),
+		}
+		logger.InfoLogger.Printf("Attempting to update host hashrate: %+v", hostHash)
+		err = database.UpdateHostHashrate(hostHash)
+		if err != nil {
+			logger.ErrorLogger.Printf("Error updating hashrate for host %s: %v", data.WorkerName, err)
+			continue
+		}
+		logger.InfoLogger.Printf("Successfully updated hashrate for host %s", data.WorkerName)
+	}
+
+	return nil
+}
+
+func getTotalPages(baseURL, apiKey, coin string) (int, error) {
+	url := fmt.Sprintf("%s/v1/hashrate/worker?coin=%s&page=1", baseURL, coin)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return 0, fmt.Errorf("error creating request for total pages: %v", err)
+	}
+	req.Header.Add("X-API-KEY", apiKey)
+	client := &http.Client{
+		Transport: &http.Transport{
+			MaxIdleConns:        common.MaxConcurrentRequests,
+			MaxIdleConnsPerHost: common.MaxConcurrentRequests,
+		},
+	}
+	response, err := client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("error fetching total pages: %v", err)
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return 0, fmt.Errorf("error reading response body for total pages: %v", err)
+	}
+
+	var hashrateData models.ViaBTCHashrateResponse
+	err = json.Unmarshal(body, &hashrateData)
+	if err != nil {
+		logger.ErrorLogger.Printf("Response body: %s", string(body))
+		return 0, fmt.Errorf("error unmarshalling response body for total pages: %v", err)
+	}
+
+	totalPages := hashrateData.Data.TotalPages
+	return totalPages, nil
+}
+
+func FetchOverallAccountHashrate(baseURL, apiKey string, coins []string, workerID, poolID string) error {
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, common.MaxConcurrentRequests)
+
+	for _, coin := range coins {
+		wg.Add(1)
+		go func(coin string) {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			url := fmt.Sprintf("%s/v1/hashrate?coin=%s", baseURL, coin)
+			client := &http.Client{
+				Transport: &http.Transport{
+					MaxIdleConns:        common.MaxConcurrentRequests,
+					MaxIdleConnsPerHost: common.MaxConcurrentRequests,
+				},
+			}
 			req, err := http.NewRequest("GET", url, nil)
 			if err != nil {
-				errorChan <- fmt.Errorf("error creating request for coin %s: %v", coin, err)
+				logger.ErrorLogger.Printf("Error creating request for account hashrate for coin %s: %v", coin, err)
+				<-semaphore
 				return
 			}
 			req.Header.Add("X-API-KEY", apiKey)
 			response, err := client.Do(req)
 			if err != nil {
-				log.Printf("Error fetching hashrate for coin %s: %v", coin, err)
-				errorChan <- err
+				logger.ErrorLogger.Printf("Error fetching account hashrate for coin %s: %v", coin, err)
+				<-semaphore
 				return
 			}
 			defer response.Body.Close()
 
 			body, err := io.ReadAll(response.Body)
 			if err != nil {
-				log.Printf("Error reading response body for coin %s: %v", coin, err)
-				errorChan <- err
+				logger.ErrorLogger.Printf("Error reading response body for account hashrate for coin %s: %v", coin, err)
+				<-semaphore
 				return
 			}
 
-			log.Printf("Response body for coin %s: %s", coin, string(body))
-			var hashrateData models.ViaBTCHashrateResponse
-			err = json.Unmarshal(body, &hashrateData)
+			var accountHashrateData struct {
+				Code int `json:"code"`
+				Data struct {
+					Hashrate24Hour int64 `json:"hashrate_24hour,string"`
+				} `json:"data"`
+				Message string `json:"message"`
+			}
+			err = json.Unmarshal(body, &accountHashrateData)
 			if err != nil {
-				log.Printf("Error unmarshalling response body for coin %s: %v", coin, err)
-				errorChan <- err
+				logger.ErrorLogger.Printf("Response body: %s", string(body))
+				logger.ErrorLogger.Printf("Error unmarshalling response body for account hashrate for coin %s: %v", coin, err)
+				<-semaphore
 				return
 			}
-
-			for _, data := range hashrateData.Data.Data {
-				log.Printf("Processing worker: %s, WorkerName in data: %s", accountName, data.WorkerName)
-
-				host, err := database.GetHostByWorkerName(data.WorkerName)
-				if err != nil {
-					log.Printf("WorkerName %s does not match any device of account %s", data.WorkerName, accountName)
-					continue
-				}
-
-				log.Printf("Calling GetPoolCoinUUID with poolID: %s and coin: %s", poolID, coin)
-				poolCoinUUID, err := database.GetPoolCoinUUID(poolID, coin)
-				if err != nil {
-					log.Printf("Error fetching pool coin UUID for pool %s and coin %s: %v", poolID, coin, err)
-					continue
-				}
-				if poolCoinUUID == "" {
-					log.Printf("PoolCoinUUID is empty for pool %s and coin %s", poolID, coin)
-					continue
-				}
-
-				dailyHashInt, err := strconv.ParseInt(data.Hashrate24Hour, 10, 64)
-				if err != nil {
-					log.Printf("Error converting hashrate to int64 for worker %s and coin %s: %v", data.WorkerName, coin, err)
-					continue
-				}
-
-				hostHash := models.HostHash{
-					FkHost:     host.ID,
-					FkPoolCoin: poolCoinUUID,
-					DailyHash:  dailyHashInt,
-					HashDate:   time.Now().Format("2006-01-02"),
-				}
-				hashrateChan <- hostHash
+			if accountHashrateData.Data.Hashrate24Hour == 0 {
+				logger.ErrorLogger.Printf("API error for account hashrate for coin %s: no data available\n", coin)
+				<-semaphore
+				return
 			}
+			poolCoinUUID, err := database.GetPoolCoinUUID(poolID, coin)
+			if err != nil {
+				logger.ErrorLogger.Printf("Coin %s does not exist in tb_pool_coin\n", coin)
+				<-semaphore
+				return
+			}
+			workerHash := models.WorkerHash{
+				FkWorker:   workerID,
+				FkPoolCoin: poolCoinUUID,
+				DailyHash:  accountHashrateData.Data.Hashrate24Hour,
+				HashDate:   time.Now(),
+			}
+			logger.InfoLogger.Printf("Updating worker hashrate with: %+v\n", workerHash)
+			err = database.UpdateWorkerHashrate(workerHash)
+			if err != nil {
+				logger.ErrorLogger.Printf("Error updating account hashrate for worker %s: %v", workerID, err)
+				<-semaphore
+				return
+			}
+			<-semaphore
 		}(coin)
 	}
-
-	go func() {
-		wg.Wait()
-		close(hashrateChan)
-		close(errorChan)
-	}()
-
-	for hostHash := range hashrateChan {
-		log.Printf("Attempting to update host hashrate: %+v", hostHash)
-		err := database.UpdateHostHashrate(hostHash)
-		if err != nil {
-			log.Printf("Error updating hashrate for host %s: %v", hostHash.FkHost, err)
-			continue
-		}
-		log.Printf("Successfully updated hashrate for host %s", hostHash.FkHost)
-	}
-
-	for err := range errorChan {
-		if err != nil {
-			log.Printf("Error: %v", err)
-		}
-	}
-
+	wg.Wait()
 	return nil
-}
-
-func FetchAccountHashrateHistory(baseURL, apiKey, coin, startDate, endDate string) ([]models.AccountHashrateHistory, error) {
-	var allData []models.AccountHashrateHistory
-	page := 1
-
-	for {
-		url := fmt.Sprintf("%s/v1/hashrate/history?coin=%s&start_date=%s&end_date=%s&page=%d", strings.TrimRight(baseURL, "/"), coin, startDate, endDate, page)
-		client := &http.Client{}
-		req, err := http.NewRequest("GET", url, nil)
-		if err != nil {
-			return nil, fmt.Errorf("error creating request for coin %s: %v", coin, err)
-		}
-		req.Header.Add("X-API-KEY", apiKey)
-		response, err := client.Do(req)
-		if err != nil {
-			log.Printf("Error fetching account hashrate history for coin %s: %v", coin, err)
-			return nil, err
-		}
-		defer response.Body.Close()
-
-		body, err := io.ReadAll(response.Body)
-		if err != nil {
-			log.Printf("Error reading response body for coin %s: %v", coin, err)
-			return nil, err
-		}
-
-		log.Printf("Response body for coin %s: %s", coin, string(body))
-		var hashrateHistoryResponse models.AccountHashrateHistoryResponse
-		err = json.Unmarshal(body, &hashrateHistoryResponse)
-		if err != nil {
-			log.Printf("Error unmarshalling response body for coin %s: %v", coin, err)
-			return nil, err
-		}
-
-		allData = append(allData, hashrateHistoryResponse.Data.Data...)
-
-		if !hashrateHistoryResponse.Data.HasNext {
-			break
-		}
-		page++
-	}
-
-	return allData, nil
-}
-
-func FetchWorkerHashrateHistory(baseURL, apiKey string, workerID int, coin, startDate, endDate string) ([]models.WorkerHashrateHistory, error) {
-	var allData []models.WorkerHashrateHistory
-	page := 1
-
-	for {
-		url := fmt.Sprintf("%s/v1/hashrate/worker/%d/history?coin=%s&start_date=%s&end_date=%s&page=%d", strings.TrimRight(baseURL, "/"), workerID, coin, startDate, endDate, page)
-		log.Printf("Fetching worker hashrate history with URL: %s", url) // Логирование URL
-		client := &http.Client{}
-		req, err := http.NewRequest("GET", url, nil)
-		if err != nil {
-			return nil, fmt.Errorf("error creating request for worker %d and coin %s: %v", workerID, coin, err)
-		}
-		req.Header.Add("X-API-KEY", apiKey)
-		response, err := client.Do(req)
-		if err != nil {
-			log.Printf("Error fetching worker hashrate history for worker %d and coin %s: %v", workerID, coin)
-			return nil, err
-		}
-		defer response.Body.Close()
-		body, err := io.ReadAll(response.Body)
-		if err != nil {
-			log.Printf("Error reading response body for worker %d and coin %s: %v", workerID, coin, err)
-			return nil, err
-		}
-
-		log.Printf("Response body for worker %d and coin %s: %s", workerID, coin, string(body))
-		var hashrateHistoryResponse models.WorkerHashrateHistoryResponse
-		err = json.Unmarshal(body, &hashrateHistoryResponse)
-		if err != nil {
-			log.Printf("Error unmarshalling response body for worker %d and coin %s: %v", workerID, coin, err)
-			return nil, err
-		}
-
-		for i := range hashrateHistoryResponse.Data.Data {
-			hashrateHistoryResponse.Data.Data[i].Hashrate = strings.Split(hashrateHistoryResponse.Data.Data[i].Hashrate, ".")[0]
-		}
-
-		allData = append(allData, hashrateHistoryResponse.Data.Data...)
-
-		if !hashrateHistoryResponse.Data.HasNext {
-			break
-		}
-		page++
-	}
-
-	return allData, nil
-}
-
-func FetchWorkerList(baseURL, apiKey, coin string) ([]models.WorkerListItem, error) {
-	var allData []models.WorkerListItem
-	page := 1
-
-	for {
-		url := fmt.Sprintf("%s/v1/hashrate/worker?coin=%s&page=%d", strings.TrimRight(baseURL, "/"), coin, page)
-		client := &http.Client{}
-		req, err := http.NewRequest("GET", url, nil)
-		if err != nil {
-			return nil, fmt.Errorf("error creating request for coin %s: %v", coin, err)
-		}
-		req.Header.Add("X-API-KEY", apiKey)
-		response, err := client.Do(req)
-		if err != nil {
-			log.Printf("Error fetching worker list for coin %s: %v", coin, err)
-			return nil, err
-		}
-		defer response.Body.Close()
-
-		body, err := io.ReadAll(response.Body)
-		if err != nil {
-			log.Printf("Error reading response body for coin %s: %v", coin, err)
-			return nil, err
-		}
-
-		log.Printf("Response body for coin %s: %s", coin, string(body))
-		var workerListResponse models.WorkerListResponse
-		err = json.Unmarshal(body, &workerListResponse)
-		if err != nil {
-			log.Printf("Error unmarshalling response body for coin %s: %v", coin, err)
-			return nil, err
-		}
-
-		allData = append(allData, workerListResponse.Data.Data...)
-
-		if !workerListResponse.Data.HasNext {
-			break
-		}
-		page++
-	}
-
-	return allData, nil
 }
