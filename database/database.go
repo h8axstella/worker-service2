@@ -64,15 +64,23 @@ func GetActiveWorkers() ([]models.Worker, error) {
 	var workers []models.Worker
 	for rows.Next() {
 		var worker models.Worker
+		var akey sql.NullString
 		var skey sql.NullString
-		err := rows.Scan(&worker.ID, &worker.WorkerName, &worker.AKey, &skey, &worker.FkPool)
+		var fkPool sql.NullString
+		err := rows.Scan(&worker.ID, &worker.WorkerName, &akey, &skey, &fkPool)
 		if err != nil {
 			log.Printf("Error scanning worker row: %v", err)
 			return nil, err
 		}
+		if !akey.Valid || !fkPool.Valid {
+			log.Printf("Skipping worker %s due to missing akey or fk_pool", worker.WorkerName)
+			continue
+		}
+		worker.AKey = akey.String
 		if skey.Valid {
 			worker.SKey = &skey.String
 		}
+		worker.FkPool = fkPool.String
 		workers = append(workers, worker)
 	}
 
@@ -141,17 +149,24 @@ func GetCoinsByPoolID(poolID string) ([]string, error) {
 func GetWorkerByName(workerName string) (models.Worker, error) {
 	query := `SELECT id, worker_name, akey, skey, fk_pool FROM tb_worker WHERE worker_name = $1`
 	var worker models.Worker
+	var akey sql.NullString
 	var skey sql.NullString
-	err := DB.QueryRow(query, workerName).Scan(&worker.ID, &worker.WorkerName, &worker.AKey, &skey, &worker.FkPool)
+	var fkPool sql.NullString
+	err := DB.QueryRow(query, workerName).Scan(&worker.ID, &worker.WorkerName, &akey, &skey, &fkPool)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return worker, fmt.Errorf("no worker found with WorkerName: %s", workerName)
 		}
 		return worker, fmt.Errorf("error fetching worker: %v", err)
 	}
+	if !akey.Valid || !fkPool.Valid {
+		return worker, fmt.Errorf("missing akey or fk_pool for worker: %s", workerName)
+	}
+	worker.AKey = akey.String
 	if skey.Valid {
 		worker.SKey = &skey.String
 	}
+	worker.FkPool = fkPool.String
 	return worker, nil
 }
 

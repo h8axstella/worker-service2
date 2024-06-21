@@ -23,6 +23,10 @@ func ProcessWorkers(workerName, startDate, endDate string) {
 			log.Printf("Error fetching worker %s: %v\n", workerName, err)
 			return
 		}
+		if worker.AKey == "" || worker.FkPool == "" {
+			log.Printf("Skipping worker %s due to missing akey or fk_pool", worker.WorkerName)
+			return
+		}
 		workers = append(workers, worker)
 	} else {
 		workers, err = database.GetActiveWorkers()
@@ -33,6 +37,11 @@ func ProcessWorkers(workerName, startDate, endDate string) {
 	}
 
 	for _, worker := range workers {
+		if worker.AKey == "" || worker.FkPool == "" {
+			log.Printf("Skipping worker %s due to missing akey or fk_pool", worker.WorkerName)
+			continue
+		}
+
 		fmt.Printf("Processing worker %s\n", worker.WorkerName)
 
 		pool, err := database.GetPoolByID(worker.FkPool)
