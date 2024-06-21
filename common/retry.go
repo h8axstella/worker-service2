@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	MaxConcurrentRequests = 100
+	MaxConcurrentRequests = 5
 	MaxRetryAttempts      = 3
 )
 

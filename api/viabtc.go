@@ -87,12 +87,17 @@ func fetchPageData(baseURL, apiKey, coin, accountName, accountID, poolID string,
 		host, err := database.GetHostByWorkerName(data.WorkerName)
 		if err != nil {
 			logger.WarningLogger.Printf("WorkerName %s does not match any device of account %s", data.WorkerName, accountName)
+			poolCoinUUID, err := database.GetPoolCoinUUID(poolID, coin)
+			if err != nil {
+				logger.ErrorLogger.Printf("Error fetching pool coin UUID for pool %s and coin %s: %v", poolID, coin, err)
+				continue
+			}
 			unidentHash := models.UnidentHash{
 				HashDate:    time.Now(),
 				DailyHash:   int64(data.Hashrate24Hour),
 				UnidentName: data.WorkerName,
 				FkWorker:    accountID,
-				FkPoolCoin:  poolID,
+				FkPoolCoin:  poolCoinUUID,
 			}
 			err = database.InsertUnidentHash(unidentHash)
 			if err != nil {

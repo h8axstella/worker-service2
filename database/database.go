@@ -73,7 +73,9 @@ func GetActiveWorkers() ([]models.Worker, error) {
 	for rows.Next() {
 		var worker models.Worker
 		var skey sql.NullString
-		err := rows.Scan(&worker.ID, &worker.WorkerName, &worker.AKey, &skey, &worker.FkPool)
+		var akey sql.NullString
+		var fkPool sql.NullString
+		err := rows.Scan(&worker.ID, &worker.WorkerName, &akey, &skey, &fkPool)
 		if err != nil {
 			log.Printf("Error scanning worker row: %v", err)
 			return nil, err
@@ -81,7 +83,19 @@ func GetActiveWorkers() ([]models.Worker, error) {
 		if skey.Valid {
 			worker.SKey = &skey.String
 		}
-		workers = append(workers, worker)
+		if akey.Valid {
+			worker.AKey = akey.String
+		}
+		if fkPool.Valid {
+			worker.FkPool = fkPool.String
+		} else {
+			worker.FkPool = ""
+		}
+		if worker.AKey != "" && worker.FkPool != "" {
+			workers = append(workers, worker)
+		} else {
+			log.Printf("Skipping worker %s due to missing akey or fk_pool", worker.WorkerName)
+		}
 	}
 
 	if err = rows.Err(); err != nil {
@@ -227,13 +241,23 @@ func GetPoolCoinUUID(poolID, coin string) (string, error) {
 }
 
 func InsertUnidentHash(unidentHash models.UnidentHash) error {
+	// Проверка существования fk_pool_coin
+	var exists bool
+	err := DB.QueryRow("SELECT EXISTS (SELECT 1 FROM tb_pool_coin WHERE id = $1)", unidentHash.FkPoolCoin).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("error checking pool coin existence: %v", err)
+	}
+	if !exists {
+		return fmt.Errorf("pool coin %s does not exist", unidentHash.FkPoolCoin)
+	}
+
 	query := `
         INSERT INTO tb_unident_hash (hash_date, daily_hash, unident_name, fk_worker, fk_pool_coin)
         VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (hash_date, unident_name, fk_worker, fk_pool_coin) DO UPDATE
         SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();
     `
-	_, err := DB.Exec(query, unidentHash.HashDate, unidentHash.DailyHash, unidentHash.UnidentName, unidentHash.FkWorker, unidentHash.FkPoolCoin)
+	_, err = DB.Exec(query, unidentHash.HashDate, unidentHash.DailyHash, unidentHash.UnidentName, unidentHash.FkWorker, unidentHash.FkPoolCoin)
 	if err != nil {
 		log.Printf("Error inserting unident hash: %v", err)
 		return fmt.Errorf("failed to insert unident hash: %v", err)

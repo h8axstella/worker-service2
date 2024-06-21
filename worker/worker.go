@@ -8,32 +8,40 @@ import (
 	"worker-service/api"
 	"worker-service/common"
 	"worker-service/database"
+	"worker-service/logger"
 	"worker-service/models"
 )
 
 func StartWorkerHashrateProcessor(apiSemaphore, dbSemaphore chan struct{}, maxRetryAttempts int) {
 	fmt.Println("Worker hashrate processor started...")
+	logger.InfoLogger.Println("Worker hashrate processor started...")
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 	log.Printf("Starting initial worker processing at %s\n", time.Now())
+	logger.InfoLogger.Printf("Starting initial worker processing at %s\n", time.Now())
 	ProcessActiveWorkers(apiSemaphore, dbSemaphore, maxRetryAttempts)
 	log.Printf("Initial worker processing completed at %s\n", time.Now())
+	logger.InfoLogger.Printf("Initial worker processing completed at %s\n", time.Now())
 	for {
 		select {
 		case <-ticker.C:
 			log.Printf("Starting worker processing at %s\n", time.Now())
+			logger.InfoLogger.Printf("Starting worker processing at %s\n", time.Now())
 			ProcessActiveWorkers(apiSemaphore, dbSemaphore, maxRetryAttempts)
 			log.Printf("Worker processing completed at %s\n", time.Now())
+			logger.InfoLogger.Printf("Worker processing completed at %s\n", time.Now())
 		}
 	}
 }
 
 func ProcessActiveWorkers(apiSemaphore, dbSemaphore chan struct{}, maxRetryAttempts int) {
 	fmt.Println("Fetching active workers...")
+	logger.InfoLogger.Println("Fetching active workers...")
 
 	workers, err := database.GetActiveWorkers()
 	if err != nil {
 		log.Printf("Error fetching active workers: %v\n", err)
+		logger.ErrorLogger.Printf("Error fetching active workers: %v\n", err)
 		return
 	}
 
@@ -51,21 +59,30 @@ func ProcessActiveWorkers(apiSemaphore, dbSemaphore chan struct{}, maxRetryAttem
 }
 
 func processWorker(worker models.Worker, dbSemaphore chan struct{}, maxRetryAttempts int) {
+	if worker.AKey == "" || worker.FkPool == "" {
+		log.Printf("Skipping worker %s due to missing akey or fk_pool", worker.WorkerName)
+		logger.WarningLogger.Printf("Skipping worker %s due to missing akey or fk_pool", worker.WorkerName)
+		return
+	}
+
 	pool, err := database.GetPoolByID(worker.FkPool)
 	if err != nil {
 		log.Printf("Error fetching pool for worker %s: %v\n", worker.WorkerName, err)
+		logger.ErrorLogger.Printf("Error fetching pool for worker %s: %v\n", worker.WorkerName, err)
 		return
 	}
 
 	akey, _, err := database.GetWorkerKeys(worker.ID)
 	if err != nil {
 		log.Printf("Error fetching keys for worker %s: %v\n", worker.WorkerName, err)
+		logger.ErrorLogger.Printf("Error fetching keys for worker %s: %v\n", worker.WorkerName, err)
 		return
 	}
 
 	coins, err := database.GetCoinsByPoolID(worker.FkPool)
 	if err != nil {
 		log.Printf("Error fetching coins for worker %s: %v\n", worker.WorkerName, err)
+		logger.ErrorLogger.Printf("Error fetching coins for worker %s: %v\n", worker.WorkerName, err)
 		return
 	}
 
@@ -112,7 +129,7 @@ func processEmcd(pool models.Pool, worker models.Worker, coins []string, akey st
 	for _, coin := range coins {
 		workersInfo, err := api.GetEmcdWorkersInfo(akey, coin, pool.PoolURL)
 		if err != nil {
-			log.Printf("Error fetching workers info for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
+			log.Printf("Error fetching workers info for worker %s and coin %s: %v\n", worker.WorkerName, coin)
 			continue
 		}
 		log.Printf("\n%s Workers Info:\n", coin)
