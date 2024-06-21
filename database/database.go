@@ -29,11 +29,19 @@ func Init() {
 		log.Fatalf("Failed to connect to DB: %v", err)
 	}
 
+	DB.SetMaxOpenConns(20)
+	DB.SetMaxIdleConns(5)
+	DB.SetConnMaxLifetime(0)
+
 	err = DB.Ping()
 	if err != nil {
 		log.Fatalf("Failed to ping database: %v", err)
 	}
 	fmt.Println("Database connected")
+}
+
+func Close() {
+	DB.Close()
 }
 
 func GetWorkerKeys(workerID string) (string, *string, error) {
@@ -65,7 +73,9 @@ func GetActiveWorkers() ([]models.Worker, error) {
 	for rows.Next() {
 		var worker models.Worker
 		var skey sql.NullString
-		err := rows.Scan(&worker.ID, &worker.WorkerName, &worker.AKey, &skey, &worker.FkPool)
+		var akey sql.NullString
+		var fkPool sql.NullString
+		err := rows.Scan(&worker.ID, &worker.WorkerName, &akey, &skey, &fkPool)
 		if err != nil {
 			log.Printf("Error scanning worker row: %v", err)
 			return nil, err
@@ -73,7 +83,19 @@ func GetActiveWorkers() ([]models.Worker, error) {
 		if skey.Valid {
 			worker.SKey = &skey.String
 		}
-		workers = append(workers, worker)
+		if akey.Valid {
+			worker.AKey = akey.String
+		}
+		if fkPool.Valid {
+			worker.FkPool = fkPool.String
+		} else {
+			worker.FkPool = ""
+		}
+		if worker.AKey != "" && worker.FkPool != "" {
+			workers = append(workers, worker)
+		} else {
+			log.Printf("Skipping worker %s due to missing akey or fk_pool", worker.WorkerName)
+		}
 	}
 
 	if err = rows.Err(); err != nil {
@@ -82,18 +104,6 @@ func GetActiveWorkers() ([]models.Worker, error) {
 	}
 
 	return workers, nil
-}
-func GetHostByWorkerName(workerName string) (models.Host, error) {
-	query := `SELECT id, host_worker FROM tb_host WHERE host_worker = $1`
-	var host models.Host
-	err := DB.QueryRow(query, workerName).Scan(&host.ID, &host.WorkerName)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return host, fmt.Errorf("no host found with WorkerName: %s", workerName)
-		}
-		return host, fmt.Errorf("error fetching host: %v", err)
-	}
-	return host, nil
 }
 
 func GetPoolByID(poolID string) (models.Pool, error) {
@@ -135,6 +145,19 @@ func GetCoinsByPoolID(poolID string) ([]string, error) {
 	return coins, nil
 }
 
+func GetHostByWorkerName(workerName string) (models.Host, error) {
+	query := `SELECT id, host_worker FROM tb_host WHERE host_worker = $1`
+	var host models.Host
+	err := DB.QueryRow(query, workerName).Scan(&host.ID, &host.WorkerName)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return host, fmt.Errorf("no host found with WorkerName: %s", workerName)
+		}
+		return host, fmt.Errorf("error fetching host: %v", err)
+	}
+	return host, nil
+}
+
 func UpdateWorkerHashrate(workerHash models.WorkerHash) error {
 	log.Printf("Attempting to update worker hashrate: %+v\n", workerHash)
 	query := `
@@ -150,13 +173,12 @@ func UpdateWorkerHashrate(workerHash models.WorkerHash) error {
 	}
 
 	var result models.WorkerHash
-	err = DB.QueryRow("SELECT fk_worker, daily_hash, hash_date, fk_pool_coin FROM tb_worker_hash WHERE fk_worker = $1 AND hash_date = $2 AND fk_pool_coin = $3",
-		workerHash.FkWorker, workerHash.HashDate, workerHash.FkPoolCoin).Scan(&result.FkWorker, &result.DailyHash, &result.HashDate, &result.FkPoolCoin)
+	err = DB.QueryRow("SELECT fk_worker, daily_hash, hash_date, fk_pool_coin FROM tb_worker_hash WHERE fk_worker = $1 AND hash_date = $2 AND fk_pool_coin = $3", workerHash.FkWorker, workerHash.HashDate, workerHash.FkPoolCoin).Scan(&result.FkWorker, &result.DailyHash, &result.HashDate, &result.FkPoolCoin)
 	if err != nil {
 		log.Printf("Failed to fetch inserted data: %v", err)
 		return fmt.Errorf("failed to fetch inserted data: %v", err)
 	}
-	log.Printf("Inserted worker hash: {FkWorker:%s DailyHash:%f HashDate:%s FkPoolCoin:%s}", result.FkWorker, result.DailyHash, result.HashDate, result.FkPoolCoin)
+	log.Printf("Inserted worker hash: {FkWorker:%s DailyHash:%d HashDate:%s FkPoolCoin:%s}", result.FkWorker, result.DailyHash, result.HashDate, result.FkPoolCoin)
 	return nil
 }
 
@@ -180,6 +202,7 @@ func GetHostsByWorkerID(workerID string) ([]models.Host, error) {
 	}
 	return hosts, nil
 }
+
 func UpdateHostHashrate(hostHash models.HostHash) error {
 	log.Printf("Attempting to update host hashrate: %+v\n", hostHash)
 	query := `
@@ -197,17 +220,17 @@ func UpdateHostHashrate(hostHash models.HostHash) error {
 	if err != nil {
 		return fmt.Errorf("failed to fetch inserted data: %v", err)
 	}
-	log.Printf("Inserted worker hash: {FkHost:%s DailyHash:%d HashDate:%s FkPoolCoin:%s}", result.FkHost, result.DailyHash, result.HashDate, result.FkPoolCoin)
+	log.Printf("Inserted host hash: {FkHost:%s DailyHash:%d HashDate:%s FkPoolCoin:%s}", result.FkHost, result.DailyHash, result.HashDate, result.FkPoolCoin)
 	return nil
 }
 
 func GetPoolCoinUUID(poolID, coin string) (string, error) {
 	query := `
-		SELECT pc.id
-		FROM tb_pool_coin pc
-		JOIN tb_coin c ON pc.fk_coin = c.id
-		WHERE pc.fk_pool = $1 AND c.short_name = $2
-	`
+        SELECT pc.id
+        FROM tb_pool_coin pc
+        JOIN tb_coin c ON pc.fk_coin = c.id
+        WHERE pc.fk_pool = $1 AND c.short_name = $2
+    `
 	var poolCoinID string
 	err := DB.QueryRow(query, poolID, coin).Scan(&poolCoinID)
 	if err != nil {
@@ -217,6 +240,27 @@ func GetPoolCoinUUID(poolID, coin string) (string, error) {
 	return poolCoinID, nil
 }
 
-func GetPoolCoinID(poolID, coin string) (string, error) {
-	return GetPoolCoinUUID(poolID, coin)
+func InsertUnidentHash(unidentHash models.UnidentHash) error {
+	// Проверка существования fk_pool_coin
+	var exists bool
+	err := DB.QueryRow("SELECT EXISTS (SELECT 1 FROM tb_pool_coin WHERE id = $1)", unidentHash.FkPoolCoin).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("error checking pool coin existence: %v", err)
+	}
+	if !exists {
+		return fmt.Errorf("pool coin %s does not exist", unidentHash.FkPoolCoin)
+	}
+
+	query := `
+        INSERT INTO tb_unident_hash (hash_date, daily_hash, unident_name, fk_worker, fk_pool_coin)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (hash_date, unident_name, fk_worker, fk_pool_coin) DO UPDATE
+        SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();
+    `
+	_, err = DB.Exec(query, unidentHash.HashDate, unidentHash.DailyHash, unidentHash.UnidentName, unidentHash.FkWorker, unidentHash.FkPoolCoin)
+	if err != nil {
+		log.Printf("Error inserting unident hash: %v", err)
+		return fmt.Errorf("failed to insert unident hash: %v", err)
+	}
+	return nil
 }
