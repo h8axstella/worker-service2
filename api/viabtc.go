@@ -39,6 +39,8 @@ func FetchWorkerHashrate(baseURL, apiKey, accountName string, coins []string, ac
 					})
 					if err != nil {
 						logger.ErrorLogger.Printf("Failed to fetch page %d for coin %s after %d attempts: %v", page, coin, common.MaxRetryAttempts, err)
+					} else {
+						logger.InfoLogger.Printf("Successfully fetched page %d for coin %s", page, coin)
 					}
 
 					<-semaphore
@@ -53,6 +55,7 @@ func FetchWorkerHashrate(baseURL, apiKey, accountName string, coins []string, ac
 func fetchPageData(baseURL, apiKey, coin, accountName, accountID, poolID string, page int) error {
 	url := fmt.Sprintf("%s/v1/hashrate/worker?coin=%s&page=%d", baseURL, coin, page)
 	client := &http.Client{
+		Timeout: time.Second * 30,
 		Transport: &http.Transport{
 			MaxIdleConns:        common.MaxConcurrentRequests,
 			MaxIdleConnsPerHost: common.MaxConcurrentRequests,
@@ -74,7 +77,7 @@ func fetchPageData(baseURL, apiKey, coin, accountName, accountID, poolID string,
 		return fmt.Errorf("error reading response body for coin %s: %v", coin, err)
 	}
 
-	logger.InfoLogger.Printf("Response body for coin %s: %s", coin, string(body))
+	logger.InfoLogger.Printf("Response body for coin %s (page %d): %s", coin, page, string(body))
 	var hashrateData models.ViaBTCHashrateResponse
 	err = json.Unmarshal(body, &hashrateData)
 	if err != nil {
@@ -139,6 +142,7 @@ func getTotalPages(baseURL, apiKey, coin string) (int, error) {
 	}
 	req.Header.Add("X-API-KEY", apiKey)
 	client := &http.Client{
+		Timeout: time.Second * 5,
 		Transport: &http.Transport{
 			MaxIdleConns:        common.MaxConcurrentRequests,
 			MaxIdleConnsPerHost: common.MaxConcurrentRequests,
@@ -177,6 +181,7 @@ func FetchOverallAccountHashrate(baseURL, apiKey string, coins []string, workerI
 			semaphore <- struct{}{}
 			url := fmt.Sprintf("%s/v1/hashrate?coin=%s", baseURL, coin)
 			client := &http.Client{
+				Timeout: time.Second * 30,
 				Transport: &http.Transport{
 					MaxIdleConns:        common.MaxConcurrentRequests,
 					MaxIdleConnsPerHost: common.MaxConcurrentRequests,
