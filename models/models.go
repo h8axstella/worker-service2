@@ -33,11 +33,12 @@ type HostHash struct {
 }
 
 type UnidentHash struct {
-	HashDate    time.Time `json:"hash_date"`
-	DailyHash   float64   `json:"daily_hash"`
-	UnidentName string    `json:"unident_name"`
-	FkWorker    string    `json:"fk_worker"`
-	FkPoolCoin  string    `json:"fk_pool_coin"`
+	HashDate     time.Time `json:"hash_date"`
+	DailyHash    float64   `json:"daily_hash"`
+	HostWorkerID string    `json:"host_workerid"`
+	UnidentName  string    `json:"unident_name"`
+	FkWorker     string    `json:"fk_worker"`
+	FkPoolCoin   string    `json:"fk_pool_coin"`
 }
 
 type ViaBTCAccountResponse struct {

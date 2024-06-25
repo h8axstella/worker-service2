@@ -152,11 +152,12 @@ func fetchPageDataEmcd(baseURL, apiKey, coin, accountName, accountID, poolID str
 		if err != nil {
 			logger.WarningLogger.Printf("WorkerName %s does not match any device of account %s", data.Worker, accountName)
 			unidentHash := models.UnidentHash{
-				HashDate:    time.Now(),
-				DailyHash:   data.Hashrate24h,
-				UnidentName: data.Worker,
-				FkWorker:    accountID,
-				FkPoolCoin:  poolID,
+				HashDate:     time.Now(),
+				DailyHash:    data.Hashrate24h,
+				HostWorkerID: accountID,
+				UnidentName:  data.Worker,
+				FkWorker:     accountID,
+				FkPoolCoin:   poolID,
 			}
 			err = database.InsertUnidentHash(unidentHash)
 			if err != nil {

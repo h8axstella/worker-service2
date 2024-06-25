@@ -96,11 +96,12 @@ func fetchPageData(baseURL, apiKey, coin, accountName, accountID, poolID string,
 				continue
 			}
 			unidentHash := models.UnidentHash{
-				HashDate:    time.Now(),
-				DailyHash:   data.Hashrate24Hour,
-				UnidentName: data.WorkerName,
-				FkWorker:    accountID,
-				FkPoolCoin:  poolCoinUUID,
+				HashDate:     time.Now(),
+				DailyHash:    data.Hashrate24Hour,
+				HostWorkerID: accountID, // Заменяем worker.ID на accountID
+				UnidentName:  data.WorkerName,
+				FkWorker:     accountID,
+				FkPoolCoin:   poolCoinUUID,
 			}
 			err = database.InsertUnidentHash(unidentHash)
 			if err != nil {
