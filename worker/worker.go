@@ -11,7 +11,7 @@ import (
 	"worker-service/models"
 )
 
-func ProcessWorkers(workerName, startDate, endDate string) {
+func ProcessWorkers(workerName, startDate, endDate string, processWorkerHashOnly bool) {
 	fmt.Println("Fetching active workers...")
 
 	var workers []models.Worker
@@ -76,59 +76,124 @@ func ProcessWorkers(workerName, startDate, endDate string) {
 			fmt.Printf("Fetched coins for worker %s: %v\n", worker.WorkerName, coins)
 
 			for _, coin := range coins {
-				asicList, err := api.FetchWorkerList(pool.PoolURL, akey, coin)
-				if err != nil {
-					log.Printf("Error fetching worker list for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
-					continue
+				if startDate != "" && endDate != "" {
+					accountHistory, err := api.FetchAccountHashrateHistory(pool.PoolURL, akey, coin, startDate, endDate)
+					if err != nil {
+						log.Printf("Error fetching account hashrate history for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
+						continue
+					}
+					if len(accountHistory) == 0 {
+						log.Printf("No account hashrate history found for worker %s and coin %s", worker.WorkerName, coin)
+						continue
+					}
+					log.Printf("Fetched account hashrate history for worker %s and coin %s: %+v\n", worker.WorkerName, coin, accountHistory)
+
+					for _, history := range accountHistory {
+						poolCoinID, err := database.GetPoolCoinUUID(worker.FkPool, coin)
+						if err != nil {
+							log.Printf("Error fetching PoolCoinID for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
+							continue
+						}
+						hashrateFloat, err := strconv.ParseFloat(history.Hashrate, 64)
+						if err != nil {
+							log.Printf("Error converting hashrate to float64 for worker %s and coin %s: %v", worker.WorkerName, coin, err)
+							continue
+						}
+
+						workerHash := models.WorkerHash{
+							FkWorker:   worker.ID,
+							FkPoolCoin: poolCoinID,
+							DailyHash:  hashrateFloat,
+							HashDate:   history.Date,
+							FkPool:     worker.FkPool,
+						}
+
+						log.Printf("Creating workerHash: %+v\n", workerHash)
+						err = database.UpdateWorkerHashrate(workerHash)
+						if err != nil {
+							log.Printf("Error updating account hashrate history for worker %s: %v\n", worker.WorkerName, err)
+						} else {
+							log.Printf("Successfully updated account hashrate history for worker %s on date %s\n", worker.WorkerName, history.Date)
+						}
+					}
+				} else {
+					err = api.FetchHashrate(pool.PoolURL, akey, worker.WorkerName, []string{coin}, worker.ID, pool.ID)
+					if err != nil {
+						log.Printf("Error fetching hashrate for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
+						continue
+					}
 				}
 
-				for _, asic := range asicList {
-					host, err := database.GetHostByWorkerName(asic.WorkerName)
+				if !processWorkerHashOnly {
+					// Обработка хостов
+					hosts, err := database.GetHostsByWorkerID(worker.ID)
 					if err != nil {
-						log.Printf("WorkerName %s does not match any device of account %s, saving to unident hash", asic.WorkerName, worker.WorkerName)
-						// Save to tb_unident_hash
-						saveToUnidentHash(worker.ID, worker.FkPool, coin, asic, pool.PoolURL, akey, startDate, endDate)
+						log.Printf("Error fetching hosts for worker %s: %v", worker.WorkerName, err)
 						continue
 					}
 
-					poolCoinUUID, err := database.GetPoolCoinUUID(worker.FkPool, coin)
+					asicList, err := api.FetchWorkerList(pool.PoolURL, akey, coin)
 					if err != nil {
-						log.Printf("Error fetching pool coin UUID for pool %s and coin %s: %v", worker.FkPool, coin, err)
-						continue
-					}
-					if poolCoinUUID == "" {
-						log.Printf("PoolCoinUUID is empty for pool %s and coin %s", worker.FkPool, coin)
+						log.Printf("Error fetching worker list for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
 						continue
 					}
 
-					workerHistory, err := api.FetchWorkerHashrateHistory(pool.PoolURL, akey, asic.WorkerID, coin, startDate, endDate)
-					if err != nil {
-						log.Printf("Error fetching worker hashrate history for worker %s and coin %s: %v\n", asic.WorkerName, coin, err)
-						continue
+					for _, asic := range asicList {
+						foundHost := false
+						for _, host := range hosts {
+							if asic.WorkerName == host.WorkerName {
+								log.Printf("Updating host worker_id for host ID %s with worker ID %d", host.ID, asic.WorkerID)
+								err := database.UpdateHostWorkerID(asic.WorkerID, host.ID)
+								if err != nil {
+									log.Printf("Error updating worker_id for host %s: %v\n", host.WorkerName, err)
+								}
+								foundHost = true
+							}
+						}
+						if !foundHost {
+							saveToUnidentHash(worker.ID, worker.FkPool, coin, asic, pool.PoolURL, akey, startDate, endDate)
+						}
 					}
 
-					for _, history := range workerHistory {
-						dailyHashFloat, err := strconv.ParseFloat(history.Hashrate, 64)
-						if err != nil {
-							log.Printf("Error converting hashrate to float64 for worker %s and coin %s: %v", asic.WorkerName, coin, err)
-							continue
-						}
+					for _, host := range hosts {
+						hostHashes := []models.HostHash{}
+						if host.HostWorkerID.Valid {
+							workerHistory, err := api.FetchWorkerHashrateHistory(pool.PoolURL, akey, int(host.HostWorkerID.Int64), coin, startDate, endDate)
+							if err != nil {
+								log.Printf("Error fetching worker hashrate history for worker %s and coin %s: %v\n", host.WorkerName, coin, err)
+								continue
+							}
+							for _, history := range workerHistory {
+								poolCoinID, err := database.GetPoolCoinUUID(worker.FkPool, coin)
+								if err != nil {
+									log.Printf("Error fetching PoolCoinID for worker %s and coin %s: %v\n", host.WorkerName, coin, err)
+									continue
+								}
+								hashrateFloat, err := strconv.ParseFloat(history.Hashrate, 64)
+								if err != nil {
+									log.Printf("Error converting hashrate to float64 for worker %s and coin %s: %v", host.WorkerName, coin, err)
+									continue
+								}
 
-						hostHash := models.HostHash{
-							FkHost:       host.ID,
-							FkPoolCoin:   poolCoinUUID,
-							DailyHash:    dailyHashFloat,
-							HashDate:     history.Date,
-							FkPool:       worker.FkPool,
-							HostWorkerID: strconv.Itoa(asic.WorkerID),
+								hostHash := models.HostHash{
+									FkHost:       host.ID,
+									FkPoolCoin:   poolCoinID,
+									DailyHash:    hashrateFloat,
+									HashDate:     history.Date,
+									FkPool:       worker.FkPool,
+									HostWorkerID: strconv.Itoa(int(host.HostWorkerID.Int64)), // Преобразование в строку
+								}
+								hostHashes = append(hostHashes, hostHash)
+							}
 						}
-
-						err = database.UpdateHostHashrate(hostHash)
-						if err != nil {
-							log.Printf("Error updating hashrate for host %s: %v", hostHash.FkHost, err)
-							continue
+						for _, hostHash := range hostHashes {
+							err := database.UpdateHostHashrate(hostHash)
+							if err != nil {
+								log.Printf("Error updating worker hashrate history for worker %s: %v\n", host.WorkerName, err)
+							} else {
+								log.Printf("Successfully updated worker hashrate history for worker %s on date %s\n", host.WorkerName, hostHash.HashDate)
+							}
 						}
-						log.Printf("Successfully updated hashrate for host %s on date %s", hostHash.FkHost, hostHash.HashDate)
 					}
 				}
 			}
