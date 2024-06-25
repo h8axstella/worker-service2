@@ -34,10 +34,6 @@ func main() {
 	logger.LogInfo("Scheduling daily task...")
 	go scheduleDailyTask()
 
-	fmt.Println("Starting initial task...")
-	logger.LogInfo("Starting initial task...")
-	startWorkers()
-
 	fmt.Println("Entering select statement...")
 	logger.LogInfo("Entering select statement...")
 	select {}
@@ -47,7 +43,10 @@ func scheduleDailyTask() {
 	fmt.Println("Calculating next run time...")
 	logger.LogInfo("Calculating next run time...")
 	now := time.Now()
-	next := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).Add(24 * time.Hour)
+	next := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 1, 0, now.Location())
+	if now.After(next) {
+		next = next.Add(24 * time.Hour)
+	}
 	fmt.Printf("Next run time: %v\n", next)
 	logger.LogInfo(fmt.Sprintf("Next run time: %v", next))
 	time.Sleep(time.Until(next))
@@ -86,7 +85,6 @@ func startWorkers() {
 		done <- true
 	}()
 
-	// Wait for both tasks to complete
 	select {
 	case <-done:
 		logger.LogInfo("Worker hashrate processor completed.")

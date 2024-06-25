@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 	"worker-service/models"
 
 	_ "github.com/lib/pq"
@@ -160,25 +161,73 @@ func GetHostByWorkerName(workerName string) (models.Host, error) {
 
 func UpdateWorkerHashrate(workerHash models.WorkerHash, poolID string) error {
 	log.Printf("Attempting to update worker hashrate: %+v\n", workerHash)
+	yesterday := time.Now().AddDate(0, 0, -1)
 	query := `
         INSERT INTO tb_worker_hash (fk_worker, daily_hash, hash_date, fk_pool_coin, fk_pool)
         VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (fk_worker, hash_date, fk_pool_coin) DO UPDATE
         SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();
     `
-	_, err := DB.Exec(query, workerHash.FkWorker, workerHash.DailyHash, workerHash.HashDate, workerHash.FkPoolCoin, workerHash.FkPool)
+	_, err := DB.Exec(query, workerHash.FkWorker, workerHash.DailyHash, yesterday, workerHash.FkPoolCoin, workerHash.FkPool)
 	if err != nil {
 		log.Printf("Failed to execute query: %v", err)
 		return fmt.Errorf("failed to execute query: %v", err)
 	}
 
 	var result models.WorkerHash
-	err = DB.QueryRow("SELECT fk_worker, daily_hash, hash_date, fk_pool_coin FROM tb_worker_hash WHERE fk_worker = $1 AND hash_date = $2 AND fk_pool_coin = $3", workerHash.FkWorker, workerHash.HashDate, workerHash.FkPoolCoin).Scan(&result.FkWorker, &result.DailyHash, &result.HashDate, &result.FkPoolCoin)
+	err = DB.QueryRow("SELECT fk_worker, daily_hash, hash_date, fk_pool_coin FROM tb_worker_hash WHERE fk_worker = $1 AND hash_date = $2 AND fk_pool_coin = $3", workerHash.FkWorker, yesterday, workerHash.FkPoolCoin).Scan(&result.FkWorker, &result.DailyHash, &result.HashDate, &result.FkPoolCoin)
 	if err != nil {
 		log.Printf("Failed to fetch inserted data: %v", err)
 		return fmt.Errorf("failed to fetch inserted data: %v", err)
 	}
 	log.Printf("Inserted worker hash: {FkWorker:%s DailyHash:%f HashDate:%s FkPoolCoin:%s}", result.FkWorker, result.DailyHash, result.HashDate, result.FkPoolCoin)
+	return nil
+}
+
+func UpdateHostHashrate(hostHash models.HostHash, poolID string) error {
+	log.Printf("Attempting to update host hashrate: %+v\n", hostHash)
+	yesterday := time.Now().AddDate(0, 0, -1)
+	query := `
+        INSERT INTO tb_host_hash (fk_host, daily_hash, hash_date, fk_pool_coin, fk_pool)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (fk_host, hash_date, fk_pool_coin) DO UPDATE 
+        SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();
+    `
+	_, err := DB.Exec(query, hostHash.FkHost, hostHash.DailyHash, yesterday, hostHash.FkPoolCoin, hostHash.FkPool)
+	if err != nil {
+		return fmt.Errorf("failed to execute query: %v", err)
+	}
+	var result models.HostHash
+	err = DB.QueryRow("SELECT fk_host, daily_hash, hash_date, fk_pool_coin FROM tb_host_hash WHERE fk_host = $1 AND hash_date = $2 AND fk_pool_coin = $3", hostHash.FkHost, yesterday, hostHash.FkPoolCoin).Scan(&result.FkHost, &result.DailyHash, &result.HashDate, &result.FkPoolCoin)
+	if err != nil {
+		return fmt.Errorf("failed to fetch inserted data: %v", err)
+	}
+	log.Printf("Inserted host hash: {FkHost:%s DailyHash:%f HashDate:%s FkPoolCoin:%s}", result.FkHost, result.DailyHash, result.HashDate, result.FkPoolCoin)
+	return nil
+}
+
+func InsertUnidentHash(unidentHash models.UnidentHash) error {
+	var exists bool
+	yesterday := time.Now().AddDate(0, 0, -1)
+	err := DB.QueryRow("SELECT EXISTS (SELECT 1 FROM tb_pool_coin WHERE id = $1)", unidentHash.FkPoolCoin).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("error checking pool coin existence: %v", err)
+	}
+	if !exists {
+		return fmt.Errorf("pool coin %s does not exist", unidentHash.FkPoolCoin)
+	}
+
+	query := `
+        INSERT INTO tb_unident_hash (hash_date, daily_hash, unident_name, fk_worker, fk_pool_coin, host_workerid)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (hash_date, unident_name, fk_worker, fk_pool_coin) DO UPDATE
+        SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();
+    `
+	_, err = DB.Exec(query, yesterday, unidentHash.DailyHash, unidentHash.UnidentName, unidentHash.FkWorker, unidentHash.FkPoolCoin, unidentHash.HostWorkerID)
+	if err != nil {
+		log.Printf("Error inserting unident hash: %v", err)
+		return fmt.Errorf("failed to insert unident hash: %v", err)
+	}
 	return nil
 }
 
@@ -203,27 +252,6 @@ func GetHostsByWorkerID(workerID string) ([]models.Host, error) {
 	return hosts, nil
 }
 
-func UpdateHostHashrate(hostHash models.HostHash, poolID string) error {
-	log.Printf("Attempting to update host hashrate: %+v\n", hostHash)
-	query := `
-        INSERT INTO tb_host_hash (fk_host, daily_hash, hash_date, fk_pool_coin, fk_pool)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (fk_host, hash_date, fk_pool_coin) DO UPDATE 
-        SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();
-    `
-	_, err := DB.Exec(query, hostHash.FkHost, hostHash.DailyHash, hostHash.HashDate, hostHash.FkPoolCoin, hostHash.FkPool)
-	if err != nil {
-		return fmt.Errorf("failed to execute query: %v", err)
-	}
-	var result models.HostHash
-	err = DB.QueryRow("SELECT fk_host, daily_hash, hash_date, fk_pool_coin FROM tb_host_hash WHERE fk_host = $1 AND hash_date = $2 AND fk_pool_coin = $3", hostHash.FkHost, hostHash.HashDate, hostHash.FkPoolCoin).Scan(&result.FkHost, &result.DailyHash, &result.HashDate, &result.FkPoolCoin)
-	if err != nil {
-		return fmt.Errorf("failed to fetch inserted data: %v", err)
-	}
-	log.Printf("Inserted host hash: {FkHost:%s DailyHash:%f HashDate:%s FkPoolCoin:%s}", result.FkHost, result.DailyHash, result.HashDate, result.FkPoolCoin)
-	return nil
-}
-
 func GetPoolCoinUUID(poolID, coin string) (string, error) {
 	query := `
         SELECT pc.id
@@ -238,28 +266,4 @@ func GetPoolCoinUUID(poolID, coin string) (string, error) {
 		return "", err
 	}
 	return poolCoinID, nil
-}
-
-func InsertUnidentHash(unidentHash models.UnidentHash) error {
-	var exists bool
-	err := DB.QueryRow("SELECT EXISTS (SELECT 1 FROM tb_pool_coin WHERE id = $1)", unidentHash.FkPoolCoin).Scan(&exists)
-	if err != nil {
-		return fmt.Errorf("error checking pool coin existence: %v", err)
-	}
-	if !exists {
-		return fmt.Errorf("pool coin %s does not exist", unidentHash.FkPoolCoin)
-	}
-
-	query := `
-        INSERT INTO tb_unident_hash (hash_date, daily_hash, host_workerid, unident_name, fk_worker, fk_pool_coin)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT (hash_date, unident_name, fk_worker, fk_pool_coin) DO UPDATE
-        SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();
-    `
-	_, err = DB.Exec(query, unidentHash.HashDate, unidentHash.DailyHash, unidentHash.HostWorkerID, unidentHash.UnidentName, unidentHash.FkWorker, unidentHash.FkPoolCoin)
-	if err != nil {
-		log.Printf("Error inserting unident hash: %v", err)
-		return fmt.Errorf("failed to insert unident hash: %v", err)
-	}
-	return nil
 }
