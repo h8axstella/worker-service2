@@ -158,15 +158,15 @@ func GetHostByWorkerName(workerName string) (models.Host, error) {
 	return host, nil
 }
 
-func UpdateWorkerHashrate(workerHash models.WorkerHash) error {
+func UpdateWorkerHashrate(workerHash models.WorkerHash, poolID string) error {
 	log.Printf("Attempting to update worker hashrate: %+v\n", workerHash)
 	query := `
-        INSERT INTO tb_worker_hash (fk_worker, daily_hash, hash_date, fk_pool_coin)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO tb_worker_hash (fk_worker, daily_hash, hash_date, fk_pool_coin, fk_pool)
+        VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (fk_worker, hash_date, fk_pool_coin) DO UPDATE
         SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();
     `
-	_, err := DB.Exec(query, workerHash.FkWorker, workerHash.DailyHash, workerHash.HashDate, workerHash.FkPoolCoin)
+	_, err := DB.Exec(query, workerHash.FkWorker, workerHash.DailyHash, workerHash.HashDate, workerHash.FkPoolCoin, workerHash.FkPool)
 	if err != nil {
 		log.Printf("Failed to execute query: %v", err)
 		return fmt.Errorf("failed to execute query: %v", err)
@@ -178,7 +178,7 @@ func UpdateWorkerHashrate(workerHash models.WorkerHash) error {
 		log.Printf("Failed to fetch inserted data: %v", err)
 		return fmt.Errorf("failed to fetch inserted data: %v", err)
 	}
-	log.Printf("Inserted worker hash: {FkWorker:%s DailyHash:%d HashDate:%s FkPoolCoin:%s}", result.FkWorker, result.DailyHash, result.HashDate, result.FkPoolCoin)
+	log.Printf("Inserted worker hash: {FkWorker:%s DailyHash:%f HashDate:%s FkPoolCoin:%s}", result.FkWorker, result.DailyHash, result.HashDate, result.FkPoolCoin)
 	return nil
 }
 
@@ -203,15 +203,15 @@ func GetHostsByWorkerID(workerID string) ([]models.Host, error) {
 	return hosts, nil
 }
 
-func UpdateHostHashrate(hostHash models.HostHash) error {
+func UpdateHostHashrate(hostHash models.HostHash, poolID string) error {
 	log.Printf("Attempting to update host hashrate: %+v\n", hostHash)
 	query := `
-        INSERT INTO tb_host_hash (fk_host, daily_hash, hash_date, fk_pool_coin)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO tb_host_hash (fk_host, daily_hash, hash_date, fk_pool_coin, fk_pool)
+        VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (fk_host, hash_date, fk_pool_coin) DO UPDATE 
         SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();
     `
-	_, err := DB.Exec(query, hostHash.FkHost, hostHash.DailyHash, hostHash.HashDate, hostHash.FkPoolCoin)
+	_, err := DB.Exec(query, hostHash.FkHost, hostHash.DailyHash, hostHash.HashDate, hostHash.FkPoolCoin, hostHash.FkPool)
 	if err != nil {
 		return fmt.Errorf("failed to execute query: %v", err)
 	}
@@ -220,7 +220,7 @@ func UpdateHostHashrate(hostHash models.HostHash) error {
 	if err != nil {
 		return fmt.Errorf("failed to fetch inserted data: %v", err)
 	}
-	log.Printf("Inserted host hash: {FkHost:%s DailyHash:%d HashDate:%s FkPoolCoin:%s}", result.FkHost, result.DailyHash, result.HashDate, result.FkPoolCoin)
+	log.Printf("Inserted host hash: {FkHost:%s DailyHash:%f HashDate:%s FkPoolCoin:%s}", result.FkHost, result.DailyHash, result.HashDate, result.FkPoolCoin)
 	return nil
 }
 
@@ -241,7 +241,6 @@ func GetPoolCoinUUID(poolID, coin string) (string, error) {
 }
 
 func InsertUnidentHash(unidentHash models.UnidentHash) error {
-	// Проверка существования fk_pool_coin
 	var exists bool
 	err := DB.QueryRow("SELECT EXISTS (SELECT 1 FROM tb_pool_coin WHERE id = $1)", unidentHash.FkPoolCoin).Scan(&exists)
 	if err != nil {

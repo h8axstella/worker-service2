@@ -18,21 +18,23 @@ type Pool struct {
 
 type WorkerHash struct {
 	FkWorker   string    `json:"fk_worker"`
-	DailyHash  int64     `json:"daily_hash"`
+	DailyHash  float64   `json:"daily_hash"`
 	HashDate   time.Time `json:"hash_date"`
 	FkPoolCoin string    `json:"fk_pool_coin"`
+	FkPool     string    `json:"fk_pool"`
 }
 
 type HostHash struct {
 	FkHost     string    `json:"fk_host"`
-	DailyHash  int64     `json:"daily_hash"`
+	DailyHash  float64   `json:"daily_hash"`
 	HashDate   time.Time `json:"hash_date"`
 	FkPoolCoin string    `json:"fk_pool_coin"`
+	FkPool     string    `json:"fk_pool"`
 }
 
 type UnidentHash struct {
 	HashDate    time.Time `json:"hash_date"`
-	DailyHash   int64     `json:"daily_hash"`
+	DailyHash   float64   `json:"daily_hash"`
 	UnidentName string    `json:"unident_name"`
 	FkWorker    string    `json:"fk_worker"`
 	FkPoolCoin  string    `json:"fk_pool_coin"`

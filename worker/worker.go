@@ -156,18 +156,19 @@ func processEmcd(pool models.Pool, worker models.Worker, coins []string, akey st
 			for _, host := range hosts {
 				if detail.Worker == host.WorkerName {
 					matchFound = true
-					dailyHashInt := int64(detail.Hashrate24h)
+					dailyHashInt := detail.Hashrate24h
 					log.Printf("Inserting worker hash for worker %s", detail.Worker)
 					workerHash := models.WorkerHash{
 						FkWorker:   worker.ID,
 						FkPoolCoin: poolCoinID,
-						DailyHash:  int64(workersInfo.TotalHashrate.Hashrate24h),
+						DailyHash:  workersInfo.TotalHashrate.Hashrate24h,
 						HashDate:   time.Now(),
+						FkPool:     pool.ID, // Заполнение fk_pool
 					}
 					dbSemaphore <- struct{}{}
 					go func() {
 						defer func() { <-dbSemaphore }()
-						err = database.UpdateWorkerHashrate(workerHash)
+						err = database.UpdateWorkerHashrate(workerHash, pool.ID)
 						if err != nil {
 							log.Printf("Error updating worker hashrate for worker %s: %v", detail.Worker, err)
 						}
@@ -179,11 +180,12 @@ func processEmcd(pool models.Pool, worker models.Worker, coins []string, akey st
 						DailyHash:  dailyHashInt,
 						HashDate:   time.Now(),
 						FkPoolCoin: poolCoinID,
+						FkPool:     pool.ID, // Заполнение fk_pool
 					}
 					dbSemaphore <- struct{}{}
 					go func() {
 						defer func() { <-dbSemaphore }()
-						err = database.UpdateHostHashrate(hostHash)
+						err = database.UpdateHostHashrate(hostHash, pool.ID)
 						if err != nil {
 							log.Printf("Error updating host hashrate for host %s: %v", detail.Worker, err)
 						}
@@ -200,13 +202,14 @@ func processEmcd(pool models.Pool, worker models.Worker, coins []string, akey st
 		totalWorkerHash := models.WorkerHash{
 			FkWorker:   worker.ID,
 			FkPoolCoin: poolCoinID,
-			DailyHash:  int64(workersInfo.TotalHashrate.Hashrate24h),
+			DailyHash:  workersInfo.TotalHashrate.Hashrate24h,
 			HashDate:   time.Now(),
+			FkPool:     pool.ID, // Заполнение fk_pool
 		}
 		dbSemaphore <- struct{}{}
 		go func() {
 			defer func() { <-dbSemaphore }()
-			err = database.UpdateWorkerHashrate(totalWorkerHash)
+			err = database.UpdateWorkerHashrate(totalWorkerHash, pool.ID)
 			if err != nil {
 				log.Printf("Error updating total hashrate for worker %s: %v", worker.WorkerName, err)
 			}

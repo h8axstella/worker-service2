@@ -153,7 +153,7 @@ func fetchPageDataEmcd(baseURL, apiKey, coin, accountName, accountID, poolID str
 			logger.WarningLogger.Printf("WorkerName %s does not match any device of account %s", data.Worker, accountName)
 			unidentHash := models.UnidentHash{
 				HashDate:    time.Now(),
-				DailyHash:   int64(data.Hashrate24h),
+				DailyHash:   data.Hashrate24h,
 				UnidentName: data.Worker,
 				FkWorker:    accountID,
 				FkPoolCoin:  poolID,
@@ -171,15 +171,16 @@ func fetchPageDataEmcd(baseURL, apiKey, coin, accountName, accountID, poolID str
 			continue
 		}
 
-		dailyHashInt := int64(data.Hashrate24h)
+		dailyHashFloat := data.Hashrate24h // Изменено на float64
 		hostHash := models.HostHash{
 			FkHost:     host.ID,
 			FkPoolCoin: poolCoinUUID,
-			DailyHash:  dailyHashInt,
+			DailyHash:  dailyHashFloat,
 			HashDate:   time.Now(),
+			FkPool:     poolID,
 		}
 		logger.InfoLogger.Printf("Attempting to update host hashrate: %+v", hostHash)
-		err = database.UpdateHostHashrate(hostHash)
+		err = database.UpdateHostHashrate(hostHash, poolID)
 		if err != nil {
 			logger.ErrorLogger.Printf("Error updating hashrate for host %s: %v", data.Worker, err)
 			continue

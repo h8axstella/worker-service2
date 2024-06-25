@@ -97,7 +97,7 @@ func fetchPageData(baseURL, apiKey, coin, accountName, accountID, poolID string,
 			}
 			unidentHash := models.UnidentHash{
 				HashDate:    time.Now(),
-				DailyHash:   int64(data.Hashrate24Hour),
+				DailyHash:   data.Hashrate24Hour,
 				UnidentName: data.WorkerName,
 				FkWorker:    accountID,
 				FkPoolCoin:  poolCoinUUID,
@@ -115,15 +115,16 @@ func fetchPageData(baseURL, apiKey, coin, accountName, accountID, poolID string,
 			continue
 		}
 
-		dailyHashInt := int64(data.Hashrate24Hour)
+		dailyHashFloat := data.Hashrate24Hour // Изменено на float64
 		hostHash := models.HostHash{
 			FkHost:     host.ID,
 			FkPoolCoin: poolCoinUUID,
-			DailyHash:  dailyHashInt,
+			DailyHash:  dailyHashFloat,
 			HashDate:   time.Now(),
+			FkPool:     poolID,
 		}
 		logger.InfoLogger.Printf("Attempting to update host hashrate: %+v", hostHash)
-		err = database.UpdateHostHashrate(hostHash)
+		err = database.UpdateHostHashrate(hostHash, poolID)
 		if err != nil {
 			logger.ErrorLogger.Printf("Error updating hashrate for host %s: %v", data.WorkerName, err)
 			continue
@@ -212,7 +213,7 @@ func FetchOverallAccountHashrate(baseURL, apiKey string, coins []string, workerI
 			var accountHashrateData struct {
 				Code int `json:"code"`
 				Data struct {
-					Hashrate24Hour int64 `json:"hashrate_24hour,string"`
+					Hashrate24Hour float64 `json:"hashrate_24hour,string"` // Изменено на float64
 				} `json:"data"`
 				Message string `json:"message"`
 			}
@@ -237,11 +238,12 @@ func FetchOverallAccountHashrate(baseURL, apiKey string, coins []string, workerI
 			workerHash := models.WorkerHash{
 				FkWorker:   workerID,
 				FkPoolCoin: poolCoinUUID,
-				DailyHash:  accountHashrateData.Data.Hashrate24Hour,
+				DailyHash:  accountHashrateData.Data.Hashrate24Hour, // Используется float64
 				HashDate:   time.Now(),
+				FkPool:     poolID,
 			}
 			logger.InfoLogger.Printf("Updating worker hashrate with: %+v\n", workerHash)
-			err = database.UpdateWorkerHashrate(workerHash)
+			err = database.UpdateWorkerHashrate(workerHash, poolID)
 			if err != nil {
 				logger.ErrorLogger.Printf("Error updating account hashrate for worker %s: %v", workerID, err)
 				<-semaphore
