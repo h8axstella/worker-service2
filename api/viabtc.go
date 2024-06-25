@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"sync"
 	"time"
@@ -34,6 +35,9 @@ func FetchWorkerHashrate(baseURL, apiKey, accountName string, coins []string, ac
 					defer wg.Done()
 					semaphore <- struct{}{}
 
+					// Добавим случайную задержку
+					time.Sleep(time.Duration(rand.Intn(200)+100) * time.Millisecond)
+
 					err := common.Retry(common.MaxRetryAttempts, 2, func() error {
 						return fetchPageData(baseURL, apiKey, coin, accountName, accountID, poolID, page)
 					})
@@ -46,6 +50,95 @@ func FetchWorkerHashrate(baseURL, apiKey, accountName string, coins []string, ac
 					<-semaphore
 				}(page)
 			}
+		}(coin)
+	}
+	wg.Wait()
+	return nil
+}
+
+func FetchOverallAccountHashrate(baseURL, apiKey string, coins []string, workerID, poolID string) error {
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, common.MaxConcurrentRequests)
+
+	for _, coin := range coins {
+		wg.Add(1)
+		go func(coin string) {
+			defer wg.Done()
+			semaphore <- struct{}{}
+
+			// Добавим случайную задержку
+			time.Sleep(time.Duration(rand.Intn(200)+100) * time.Millisecond)
+
+			url := fmt.Sprintf("%s/v1/hashrate?coin=%s", baseURL, coin)
+			client := &http.Client{
+				Timeout: time.Second * 30,
+				Transport: &http.Transport{
+					MaxIdleConns:        common.MaxConcurrentRequests,
+					MaxIdleConnsPerHost: common.MaxConcurrentRequests,
+				},
+			}
+			req, err := http.NewRequest("GET", url, nil)
+			if err != nil {
+				logger.ErrorLogger.Printf("Error creating request for account hashrate for coin %s: %v", coin, err)
+				<-semaphore
+				return
+			}
+			req.Header.Add("X-API-KEY", apiKey)
+			response, err := client.Do(req)
+			if err != nil {
+				logger.ErrorLogger.Printf("Error fetching account hashrate for coin %s: %v", coin, err)
+				<-semaphore
+				return
+			}
+			defer response.Body.Close()
+
+			body, err := io.ReadAll(response.Body)
+			if err != nil {
+				logger.ErrorLogger.Printf("Error reading response body for account hashrate for coin %s: %v", coin, err)
+				<-semaphore
+				return
+			}
+
+			var accountHashrateData struct {
+				Code int `json:"code"`
+				Data struct {
+					Hashrate24Hour float64 `json:"hashrate_24hour,string"` // Изменено на float64
+				} `json:"data"`
+				Message string `json:"message"`
+			}
+			err = json.Unmarshal(body, &accountHashrateData)
+			if err != nil {
+				logger.ErrorLogger.Printf("Response body: %s", string(body))
+				logger.ErrorLogger.Printf("Error unmarshalling response body for account hashrate for coin %s: %v", coin, err)
+				<-semaphore
+				return
+			}
+			if accountHashrateData.Data.Hashrate24Hour == 0 {
+				logger.ErrorLogger.Printf("API error for account hashrate for coin %s: no data available\n", coin)
+				<-semaphore
+				return
+			}
+			poolCoinUUID, err := database.GetPoolCoinUUID(poolID, coin)
+			if err != nil {
+				logger.ErrorLogger.Printf("Coin %s does not exist in tb_pool_coin\n", coin)
+				<-semaphore
+				return
+			}
+			workerHash := models.WorkerHash{
+				FkWorker:   workerID,
+				FkPoolCoin: poolCoinUUID,
+				DailyHash:  accountHashrateData.Data.Hashrate24Hour, // Используется float64
+				HashDate:   time.Now(),
+				FkPool:     poolID,
+			}
+			logger.InfoLogger.Printf("Updating worker hashrate with: %+v\n", workerHash)
+			err = database.UpdateWorkerHashrate(workerHash, poolID)
+			if err != nil {
+				logger.ErrorLogger.Printf("Error updating account hashrate for worker %s: %v", workerID, err)
+				<-semaphore
+				return
+			}
+			<-semaphore
 		}(coin)
 	}
 	wg.Wait()
@@ -170,89 +263,4 @@ func getTotalPages(baseURL, apiKey, coin string) (int, error) {
 
 	totalPages := hashrateData.Data.TotalPages
 	return totalPages, nil
-}
-
-func FetchOverallAccountHashrate(baseURL, apiKey string, coins []string, workerID, poolID string) error {
-	var wg sync.WaitGroup
-	semaphore := make(chan struct{}, common.MaxConcurrentRequests)
-
-	for _, coin := range coins {
-		wg.Add(1)
-		go func(coin string) {
-			defer wg.Done()
-			semaphore <- struct{}{}
-			url := fmt.Sprintf("%s/v1/hashrate?coin=%s", baseURL, coin)
-			client := &http.Client{
-				Timeout: time.Second * 30,
-				Transport: &http.Transport{
-					MaxIdleConns:        common.MaxConcurrentRequests,
-					MaxIdleConnsPerHost: common.MaxConcurrentRequests,
-				},
-			}
-			req, err := http.NewRequest("GET", url, nil)
-			if err != nil {
-				logger.ErrorLogger.Printf("Error creating request for account hashrate for coin %s: %v", coin, err)
-				<-semaphore
-				return
-			}
-			req.Header.Add("X-API-KEY", apiKey)
-			response, err := client.Do(req)
-			if err != nil {
-				logger.ErrorLogger.Printf("Error fetching account hashrate for coin %s: %v", coin, err)
-				<-semaphore
-				return
-			}
-			defer response.Body.Close()
-
-			body, err := io.ReadAll(response.Body)
-			if err != nil {
-				logger.ErrorLogger.Printf("Error reading response body for account hashrate for coin %s: %v", coin, err)
-				<-semaphore
-				return
-			}
-
-			var accountHashrateData struct {
-				Code int `json:"code"`
-				Data struct {
-					Hashrate24Hour float64 `json:"hashrate_24hour,string"` // Изменено на float64
-				} `json:"data"`
-				Message string `json:"message"`
-			}
-			err = json.Unmarshal(body, &accountHashrateData)
-			if err != nil {
-				logger.ErrorLogger.Printf("Response body: %s", string(body))
-				logger.ErrorLogger.Printf("Error unmarshalling response body for account hashrate for coin %s: %v", coin, err)
-				<-semaphore
-				return
-			}
-			if accountHashrateData.Data.Hashrate24Hour == 0 {
-				logger.ErrorLogger.Printf("API error for account hashrate for coin %s: no data available\n", coin)
-				<-semaphore
-				return
-			}
-			poolCoinUUID, err := database.GetPoolCoinUUID(poolID, coin)
-			if err != nil {
-				logger.ErrorLogger.Printf("Coin %s does not exist in tb_pool_coin\n", coin)
-				<-semaphore
-				return
-			}
-			workerHash := models.WorkerHash{
-				FkWorker:   workerID,
-				FkPoolCoin: poolCoinUUID,
-				DailyHash:  accountHashrateData.Data.Hashrate24Hour, // Используется float64
-				HashDate:   time.Now(),
-				FkPool:     poolID,
-			}
-			logger.InfoLogger.Printf("Updating worker hashrate with: %+v\n", workerHash)
-			err = database.UpdateWorkerHashrate(workerHash, poolID)
-			if err != nil {
-				logger.ErrorLogger.Printf("Error updating account hashrate for worker %s: %v", workerID, err)
-				<-semaphore
-				return
-			}
-			<-semaphore
-		}(coin)
-	}
-	wg.Wait()
-	return nil
 }
