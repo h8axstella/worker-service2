@@ -93,9 +93,9 @@ func GetActiveWorkers() ([]models.Worker, error) {
 }
 
 func GetHostByWorkerName(workerName string) (models.Host, error) {
-	query := `SELECT id, host_worker, host_workerid FROM tb_host WHERE host_worker = $1`
+	query := `SELECT id, host_worker FROM tb_host WHERE host_worker = $1`
 	var host models.Host
-	err := DB.QueryRow(query, workerName).Scan(&host.ID, &host.WorkerName, &host.HostWorkerID)
+	err := DB.QueryRow(query, workerName).Scan(&host.ID, &host.WorkerName)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return host, fmt.Errorf("no host found with WorkerName: %s", workerName)
@@ -172,44 +172,74 @@ func GetWorkerByName(workerName string) (models.Worker, error) {
 
 func UpdateWorkerHashrate(workerHash models.WorkerHash) error {
 	query := `
-        INSERT INTO tb_worker_hash (fk_worker, daily_hash, hash_date, fk_pool_coin)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (fk_worker, hash_date, fk_pool_coin) DO UPDATE
-        SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();
+        INSERT INTO tb_worker_hash (fk_worker, daily_hash, hash_date, fk_pool_coin, fk_pool)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (fk_worker, hash_date, fk_pool_coin) DO NOTHING;
     `
+
 	if workerHash.FkPoolCoin == "" {
 		log.Printf("FkPoolCoin is empty for worker: %s", workerHash.FkWorker)
 		return fmt.Errorf("FkPoolCoin is empty for worker: %s", workerHash.FkWorker)
 	}
-	_, err := DB.Exec(query, workerHash.FkWorker, workerHash.DailyHash, workerHash.HashDate, workerHash.FkPoolCoin)
+
+	log.Printf("Executing query to update worker hashrate: %+v", workerHash)
+	result, err := DB.Exec(query, workerHash.FkWorker, workerHash.DailyHash, workerHash.HashDate, workerHash.FkPoolCoin, workerHash.FkPool)
 	if err != nil {
 		log.Printf("Failed to execute query: %v", err)
 		return fmt.Errorf("failed to execute query: %v", err)
 	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Printf("Failed to get rows affected: %v", err)
+		return fmt.Errorf("failed to get rows affected: %v", err)
+	}
+
+	log.Printf("Rows affected: %d", rowsAffected)
 	return nil
 }
 
 func UpdateHostHashrate(hostHash models.HostHash) error {
 	query := `
-        INSERT INTO tb_host_hash (fk_host, daily_hash, hash_date, fk_pool_coin)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (fk_host, hash_date, fk_pool_coin) DO UPDATE 
-        SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();
+        INSERT INTO tb_host_hash (fk_host, daily_hash, hash_date, fk_pool_coin, fk_pool, host_workerid)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (fk_host, hash_date, fk_pool_coin) DO NOTHING;
     `
+
 	if hostHash.FkPoolCoin == "" {
 		log.Printf("FkPoolCoin is empty for host: %s", hostHash.FkHost)
 		return fmt.Errorf("FkPoolCoin is empty for host: %s", hostHash.FkHost)
 	}
-	_, err := DB.Exec(query, hostHash.FkHost, hostHash.DailyHash, hostHash.HashDate, hostHash.FkPoolCoin)
+
+	log.Printf("Executing query to update host hashrate: %+v", hostHash)
+	_, err := DB.Exec(query, hostHash.FkHost, hostHash.DailyHash, hostHash.HashDate, hostHash.FkPoolCoin, hostHash.FkPool, hostHash.HostWorkerID)
 	if err != nil {
 		log.Printf("Failed to execute query: %v", err)
 		return fmt.Errorf("failed to execute query: %v", err)
 	}
+
+	return nil
+}
+
+func InsertUnidentHash(unidentHash models.UnidentHash) error {
+	query := `
+        INSERT INTO tb_unident_hash (id, hash_date, daily_hash, host_workerid, unident_name, fk_worker, fk_pool_coin, last_edit, status)
+        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW()::timestamp(0), 0)
+        ON CONFLICT (hash_date, unident_name, fk_worker, fk_pool_coin) DO NOTHING;
+    `
+
+	log.Printf("Executing query to insert unident hashrate: %+v", unidentHash)
+	_, err := DB.Exec(query, unidentHash.HashDate, unidentHash.DailyHash, unidentHash.HostWorkerID, unidentHash.UnidentName, unidentHash.FkWorker, unidentHash.FkPoolCoin)
+	if err != nil {
+		log.Printf("Failed to execute query: %v", err)
+		return fmt.Errorf("failed to execute query: %v", err)
+	}
+
 	return nil
 }
 
 func GetHostsByWorkerID(workerID string) ([]models.Host, error) {
-	query := `SELECT id, host_worker, host_workerid FROM tb_host WHERE fk_worker = $1`
+	query := `SELECT id, host_worker FROM tb_host WHERE fk_worker = $1`
 	rows, err := DB.Query(query, workerID)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching hosts: %v", err)
@@ -218,7 +248,7 @@ func GetHostsByWorkerID(workerID string) ([]models.Host, error) {
 	var hosts []models.Host
 	for rows.Next() {
 		var host models.Host
-		if err := rows.Scan(&host.ID, &host.WorkerName, &host.HostWorkerID); err != nil {
+		if err := rows.Scan(&host.ID, &host.WorkerName); err != nil {
 			return nil, fmt.Errorf("error scanning host row: %v", err)
 		}
 		hosts = append(hosts, host)
@@ -246,10 +276,31 @@ func GetPoolCoinUUID(poolID, coin string) (string, error) {
 }
 
 func UpdateHostWorkerID(hostWorkerID int, hostID string) error {
-	query := `UPDATE tb_host SET host_workerid = $1 WHERE id = $2`
-	_, err := DB.Exec(query, hostWorkerID, hostID)
+	log.Printf("Updating host worker_id for host ID %s with worker ID %d\n", hostID, hostWorkerID)
+	tx, err := DB.Begin()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer tx.Rollback()
+
+	query := `UPDATE tb_host_hash SET host_workerid = $1 WHERE id = $2`
+	result, err := tx.Exec(query, hostWorkerID, hostID)
 	if err != nil {
 		return fmt.Errorf("error updating host worker_id: %v", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error fetching rows affected: %v", err)
+	}
+	if rowsAffected == 0 {
+		log.Printf("No rows were updated for host ID %s\n", hostID)
+	} else {
+		log.Printf("Successfully updated %d rows for host ID %s\n", rowsAffected, hostID)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		log.Fatal(err)
 	}
 	return nil
 }
