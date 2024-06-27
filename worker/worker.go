@@ -72,12 +72,14 @@ func processWorker(worker models.Worker, dbSemaphore chan struct{}, maxRetryAtte
 		return
 	}
 
-	akey, _, err := database.GetWorkerKeys(worker.ID)
+	akey, skey, err := database.GetWorkerKeys(worker.ID)
 	if err != nil {
 		log.Printf("Error fetching keys for worker %s: %v\n", worker.WorkerName, err)
 		logger.ErrorLogger.Printf("Error fetching keys for worker %s: %v\n", worker.WorkerName, err)
 		return
 	}
+
+	baseURL := pool.PoolURL
 
 	var coins []string
 	if pool.PoolName == "f2pool" {
@@ -99,6 +101,86 @@ func processWorker(worker models.Worker, dbSemaphore chan struct{}, maxRetryAtte
 		processF2PoolHashrate(pool, worker, coins, akey, dbSemaphore, maxRetryAttempts)
 	case "emcd":
 		processEmcd(pool, worker, coins, akey, dbSemaphore, maxRetryAttempts)
+	case "binance":
+		processBinance(pool, worker, coins, akey, *skey, baseURL, dbSemaphore, maxRetryAttempts)
+	}
+}
+
+func processBinance(pool models.Pool, worker models.Worker, coins []string, akey, skey, baseURL string, dbSemaphore chan struct{}, maxRetryAttempts int) {
+	for _, coin := range coins {
+		workersInfo, err := api.GetWorkerList(akey, skey, "sha256", worker.WorkerName, baseURL)
+		if err != nil {
+			log.Printf("Error fetching workers info for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
+			continue
+		}
+
+		for _, workerInfo := range workersInfo {
+			hosts, err := database.GetHostsByWorkerID(worker.ID)
+			if err != nil {
+				log.Printf("Error fetching hosts for account %s: %v", worker.WorkerName, err)
+				continue
+			}
+
+			matchFound := false
+			for _, host := range hosts {
+				if workerInfo.HashRateInfo.Name == host.WorkerName {
+					matchFound = true
+					hostHash := models.HostHash{
+						FkHost:     host.ID,
+						DailyHash:  workerInfo.HashRateInfo.H24HashRate,
+						HashDate:   time.Now(),
+						FkPoolCoin: pool.ID,
+						FkPool:     pool.ID,
+					}
+					dbSemaphore <- struct{}{}
+					go func() {
+						defer func() { <-dbSemaphore }()
+						err = database.UpdateHostHashrate(hostHash, pool.ID)
+						if err != nil {
+							log.Printf("Error updating host hashrate for host %s: %v", workerInfo.HashRateInfo.Name, err)
+						}
+					}()
+					break
+				}
+			}
+
+			if !matchFound {
+				unidentHash := models.UnidentHash{
+					HashDate:     time.Now(),
+					DailyHash:    workerInfo.HashRateInfo.H24HashRate,
+					HostWorkerID: worker.ID,
+					UnidentName:  workerInfo.HashRateInfo.Name,
+					FkWorker:     worker.ID,
+					FkPoolCoin:   pool.ID,
+					FkPool:       pool.ID,
+				}
+				dbSemaphore <- struct{}{}
+				go func() {
+					defer func() { <-dbSemaphore }()
+					err = database.InsertUnidentHash(unidentHash)
+					if err != nil {
+						log.Printf("Error inserting unident hash for worker %s: %v", workerInfo.HashRateInfo.Name, err)
+					}
+				}()
+			}
+		}
+
+		// Обработка общего хешрейта аккаунта
+		accountHash := models.WorkerHash{
+			FkWorker:   worker.ID,
+			FkPoolCoin: pool.ID,
+			DailyHash:  workersInfo[0].HashRateInfo.H24HashRate, // Assuming the first entry represents 24-hour account hashrate
+			HashDate:   time.Now(),
+			FkPool:     pool.ID,
+		}
+		dbSemaphore <- struct{}{}
+		go func() {
+			defer func() { <-dbSemaphore }()
+			err = database.UpdateWorkerHashrate(accountHash, pool.ID)
+			if err != nil {
+				log.Printf("Error updating account hashrate for worker %s: %v", worker.WorkerName, err)
+			}
+		}()
 	}
 }
 

@@ -39,6 +39,7 @@ type UnidentHash struct {
 	UnidentName  string    `json:"unident_name"`
 	FkWorker     string    `json:"fk_worker"`
 	FkPoolCoin   string    `json:"fk_pool_coin"`
+	FkPool       string    `json:"fk_pool"`
 }
 
 type ViaBTCAccountResponse struct {
@@ -128,13 +129,53 @@ type F2PoolWorkerHashrateResponse struct {
 	Workers []F2PoolWorkerHashrate `json:"workers"`
 }
 
+type HashRateInfo struct {
+	Name        string  `json:"name"`
+	HashRate    float64 `json:"hash_rate"`
+	H24HashRate float64 `json:"h24_hash_rate"`
+	Reject      float64 `json:"reject"`
+}
+
 type WorkerMiningInfo struct {
-	HashRateInfo struct {
-		Name        string  `json:"name"`
-		HashRate    float64 `json:"hash_rate"`
-		H24HashRate float64 `json:"h24_hash_rate"`
-	} `json:"hash_rate_info"`
-	LastShareAt int64  `json:"last_share_at"`
-	Status      int    `json:"status"`
-	Host        string `json:"host"`
+	HashRateInfo HashRateInfo `json:"hash_rate_info"`
+	LastShareAt  int64        `json:"last_share_at"`
+	Status       int          `json:"status"`
+	Host         string       `json:"host"`
+}
+
+type BinanceWorkerData struct {
+	WorkerId    string  `json:"workerId"`
+	WorkerName  string  `json:"workerName"`
+	Status      int     `json:"status"`
+	HashRate    float64 `json:"hashRate"`
+	DayHashRate float64 `json:"dayHashRate"`
+	RejectRate  float64 `json:"rejectRate"`
+	LastShare   int64   `json:"lastShareTime"`
+}
+
+type BinanceWorkersResponse struct {
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
+	Data struct {
+		WorkerDatas []BinanceWorkerData `json:"workerDatas"`
+		TotalNum    int                 `json:"totalNum"`
+	} `json:"data"`
+}
+
+type BinanceHashrateData struct {
+	Time     int64   `json:"time"`
+	Hashrate float64 `json:"hashrate"`
+	Reject   float64 `json:"reject"`
+}
+
+type BinanceWorkerDetail struct {
+	WorkerName    string                `json:"workerName"`
+	Type          string                `json:"type"`
+	HashrateDatas []BinanceHashrateData `json:"hashrateDatas"`
+}
+
+type BinanceWorkerDetailResponse struct {
+	Code int                   `json:"code"`
+	Msg  string                `json:"msg"`
+	Data []BinanceWorkerDetail `json:"data"`
 }

@@ -246,12 +246,12 @@ func InsertUnidentHash(unidentHash models.UnidentHash) error {
 	}
 
 	query := `
-        INSERT INTO tb_unident_hash (hash_date, daily_hash, unident_name, fk_worker, fk_pool_coin, host_workerid)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO tb_unident_hash (hash_date, daily_hash, unident_name, fk_worker, fk_pool_coin, host_workerid, fk_pool)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (hash_date, unident_name, fk_worker, fk_pool_coin) DO UPDATE
         SET daily_hash = EXCLUDED.daily_hash, last_edit = NOW();
     `
-	_, err = DB.Exec(query, yesterday, unidentHash.DailyHash, unidentHash.UnidentName, unidentHash.FkWorker, unidentHash.FkPoolCoin, unidentHash.HostWorkerID)
+	_, err = DB.Exec(query, yesterday, unidentHash.DailyHash, unidentHash.UnidentName, unidentHash.FkWorker, unidentHash.FkPoolCoin, unidentHash.HostWorkerID, unidentHash.FkPool)
 	if err != nil {
 		log.Printf("Error inserting unident hash: %v", err)
 		return fmt.Errorf("failed to insert unident hash: %v", err)

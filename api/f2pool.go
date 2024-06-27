@@ -123,7 +123,6 @@ func ProcessF2PoolWorkers(pool models.Pool, worker models.Worker, coin string, w
 		}()
 	}
 
-	// Обработка общего хешрейта аккаунта
 	accountHash := models.WorkerHash{
 		FkWorker:   worker.ID,
 		FkPoolCoin: poolCoinUUID,
