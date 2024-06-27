@@ -14,7 +14,7 @@ import (
 	"worker-service/models"
 )
 
-func FetchWorkerHashrate(baseURL, apiKey, accountName string, coins []string, accountID, poolID string) error {
+func FetchViaBTCWorkerHashrate(poolURL, akey, workerName string, coins []string, workerID, poolID string) error {
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, common.MaxConcurrentRequests)
 
@@ -23,7 +23,7 @@ func FetchWorkerHashrate(baseURL, apiKey, accountName string, coins []string, ac
 		go func(coin string) {
 			defer wg.Done()
 
-			totalPages, err := getTotalPages(baseURL, apiKey, coin)
+			totalPages, err := getTotalPages(poolURL, akey, coin)
 			if err != nil {
 				logger.ErrorLogger.Printf("Error getting total pages for coin %s: %v", coin, err)
 				return
@@ -35,11 +35,10 @@ func FetchWorkerHashrate(baseURL, apiKey, accountName string, coins []string, ac
 					defer wg.Done()
 					semaphore <- struct{}{}
 
-					// Добавим случайную задержку
 					time.Sleep(time.Duration(rand.Intn(200)+100) * time.Millisecond)
 
 					err := common.Retry(common.MaxRetryAttempts, 2, func() error {
-						return fetchPageData(baseURL, apiKey, coin, accountName, accountID, poolID, page)
+						return fetchPageData(poolURL, akey, coin, workerName, workerID, poolID, page)
 					})
 					if err != nil {
 						logger.ErrorLogger.Printf("Failed to fetch page %d for coin %s after %d attempts: %v", page, coin, common.MaxRetryAttempts, err)

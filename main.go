@@ -30,6 +30,10 @@ func main() {
 	fmt.Println("Database connected")
 	logger.LogInfo("Database connected")
 
+	fmt.Println("Starting workers on startup...")
+	logger.LogInfo("Starting workers on startup...")
+	startWorkers()
+
 	fmt.Println("Scheduling daily task...")
 	logger.LogInfo("Scheduling daily task...")
 	go scheduleDailyTask()
@@ -68,7 +72,7 @@ func startWorkers() {
 	fmt.Println("Inside startWorkers function...")
 	logger.LogInfo("Inside startWorkers function...")
 	logger.LogInfo("Starting worker hashrate processing...")
-	apiSemaphore := make(chan struct{}, 5)
+	apiSemaphore := make(chan struct{}, 2)
 	dbSemaphore := make(chan struct{}, 20)
 	done := make(chan bool)
 

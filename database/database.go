@@ -107,6 +107,34 @@ func GetActiveWorkers() ([]models.Worker, error) {
 	return workers, nil
 }
 
+func GetFullNameCoinsByPoolID(poolID string) ([]string, error) {
+	query := `SELECT c.full_name FROM tb_coin c INNER JOIN tb_pool_coin pc ON c.id = pc.fk_coin WHERE pc.fk_pool = $1`
+	rows, err := DB.Query(query, poolID)
+	if err != nil {
+		log.Printf("Error querying full name coins for poolID %s: %v", poolID, err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var coins []string
+	for rows.Next() {
+		var coin string
+		err := rows.Scan(&coin)
+		if err != nil {
+			log.Printf("Error scanning coin row: %v", err)
+			return nil, err
+		}
+		coins = append(coins, coin)
+	}
+
+	if err = rows.Err(); err != nil {
+		log.Printf("Error iterating over rows: %v", err)
+		return nil, err
+	}
+
+	return coins, nil
+}
+
 func GetPoolByID(poolID string) (models.Pool, error) {
 	query := `SELECT id, pool_name, pool_url FROM tb_pool WHERE id = $1`
 	var pool models.Pool
@@ -258,6 +286,22 @@ func GetPoolCoinUUID(poolID, coin string) (string, error) {
         FROM tb_pool_coin pc
         JOIN tb_coin c ON pc.fk_coin = c.id
         WHERE pc.fk_pool = $1 AND c.short_name = $2
+    `
+	var poolCoinID string
+	err := DB.QueryRow(query, poolID, coin).Scan(&poolCoinID)
+	if err != nil {
+		log.Printf("Error getting poolCoinID for poolID %s and coin %s: %v", poolID, coin, err)
+		return "", err
+	}
+	return poolCoinID, nil
+}
+
+func GetPoolCoinUUIDByFullName(poolID, coin string) (string, error) {
+	query := `
+        SELECT pc.id
+        FROM tb_pool_coin pc
+        JOIN tb_coin c ON pc.fk_coin = c.id
+        WHERE pc.fk_pool = $1 AND c.full_name = $2
     `
 	var poolCoinID string
 	err := DB.QueryRow(query, poolID, coin).Scan(&poolCoinID)

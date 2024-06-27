@@ -112,3 +112,29 @@ type WorkersInfo struct {
 		Active      int     `json:"active"`
 	} `json:"details"`
 }
+
+type F2PoolWorkerHashrate struct {
+	HashRateInfo struct {
+		Name        string  `json:"name"`
+		HashRate    float64 `json:"hash_rate"`
+		H24HashRate float64 `json:"h24_hash_rate"`
+	} `json:"hash_rate_info"`
+	LastShareAt int64  `json:"last_share_at"`
+	Status      int    `json:"status"`
+	Host        string `json:"host"`
+}
+
+type F2PoolWorkerHashrateResponse struct {
+	Workers []F2PoolWorkerHashrate `json:"workers"`
+}
+
+type WorkerMiningInfo struct {
+	HashRateInfo struct {
+		Name        string  `json:"name"`
+		HashRate    float64 `json:"hash_rate"`
+		H24HashRate float64 `json:"h24_hash_rate"`
+	} `json:"hash_rate_info"`
+	LastShareAt int64  `json:"last_share_at"`
+	Status      int    `json:"status"`
+	Host        string `json:"host"`
+}

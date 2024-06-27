@@ -61,7 +61,7 @@ func ProcessActiveWorkers(apiSemaphore, dbSemaphore chan struct{}, maxRetryAttem
 func processWorker(worker models.Worker, dbSemaphore chan struct{}, maxRetryAttempts int) {
 	if worker.AKey == "" || worker.FkPool == "" {
 		log.Printf("Skipping worker %s due to missing akey or fk_pool", worker.WorkerName)
-		logger.WarningLogger.Printf("Skipping worker %s due to missing akey or fk_pool", worker.WorkerName)
+		logger.WarningLogger.Printf("Skipping worker %s due to missing akey или fk_pool", worker.WorkerName)
 		return
 	}
 
@@ -79,7 +79,13 @@ func processWorker(worker models.Worker, dbSemaphore chan struct{}, maxRetryAtte
 		return
 	}
 
-	coins, err := database.GetCoinsByPoolID(worker.FkPool)
+	var coins []string
+	if pool.PoolName == "f2pool" {
+		coins, err = database.GetFullNameCoinsByPoolID(worker.FkPool)
+	} else {
+		coins, err = database.GetCoinsByPoolID(worker.FkPool)
+	}
+
 	if err != nil {
 		log.Printf("Error fetching coins for worker %s: %v\n", worker.WorkerName, err)
 		logger.ErrorLogger.Printf("Error fetching coins for worker %s: %v\n", worker.WorkerName, err)
@@ -87,14 +93,16 @@ func processWorker(worker models.Worker, dbSemaphore chan struct{}, maxRetryAtte
 	}
 
 	switch pool.PoolName {
-	case "viabtc", "f2pool":
-		processHashrate(pool, worker, coins, akey, dbSemaphore, maxRetryAttempts)
+	case "viabtc":
+		processViaBTCHashrate(pool, worker, coins, akey, dbSemaphore, maxRetryAttempts)
+	case "f2pool":
+		processF2PoolHashrate(pool, worker, coins, akey, dbSemaphore, maxRetryAttempts)
 	case "emcd":
 		processEmcd(pool, worker, coins, akey, dbSemaphore, maxRetryAttempts)
 	}
 }
 
-func processHashrate(pool models.Pool, worker models.Worker, coins []string, akey string, dbSemaphore chan struct{}, maxRetryAttempts int) {
+func processViaBTCHashrate(pool models.Pool, worker models.Worker, coins []string, akey string, dbSemaphore chan struct{}, maxRetryAttempts int) {
 	var wg sync.WaitGroup
 
 	for _, coin := range coins {
@@ -102,7 +110,7 @@ func processHashrate(pool models.Pool, worker models.Worker, coins []string, ake
 		go func(coin string) {
 			defer wg.Done()
 			err := common.Retry(maxRetryAttempts, 2, func() error {
-				return api.FetchWorkerHashrate(pool.PoolURL, akey, worker.WorkerName, []string{coin}, worker.ID, pool.ID)
+				return api.FetchViaBTCWorkerHashrate(pool.PoolURL, akey, worker.WorkerName, []string{coin}, worker.ID, pool.ID)
 			})
 			if err != nil {
 				log.Printf("Error fetching hashrate for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
@@ -119,6 +127,30 @@ func processHashrate(pool models.Pool, worker models.Worker, coins []string, ake
 					log.Printf("Error fetching account hashrate for worker %s: %v\n", worker.WorkerName, err)
 				}
 			}()
+		}(coin)
+	}
+
+	wg.Wait()
+}
+
+func processF2PoolHashrate(pool models.Pool, worker models.Worker, coins []string, akey string, dbSemaphore chan struct{}, maxRetryAttempts int) {
+	var wg sync.WaitGroup
+
+	for _, coin := range coins {
+		wg.Add(1)
+		go func(coin string) {
+			defer wg.Done()
+			err := common.Retry(maxRetryAttempts, 2, func() error {
+				workers, err := api.GetF2PoolWorkerHashrate(pool.PoolURL, akey, worker.WorkerName, coin)
+				if err != nil {
+					return err
+				}
+				return api.ProcessF2PoolWorkers(pool, worker, coin, workers, dbSemaphore)
+			})
+			if err != nil {
+				log.Printf("Error fetching hashrate for worker %s and coin %s: %v\n", worker.WorkerName, coin, err)
+				return
+			}
 		}(coin)
 	}
 
