@@ -223,8 +223,8 @@ func UpdateHostHashrate(hostHash models.HostHash) error {
 
 func InsertUnidentHash(unidentHash models.UnidentHash) error {
 	query := `
-        INSERT INTO tb_unident_hash (id, hash_date, daily_hash, host_workerid, unident_name, fk_worker, fk_pool_coin, last_edit, status)
-        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW()::timestamp(0), 0)
+        INSERT INTO tb_unident_hash (id, hash_date, daily_hash, host_workerid, unident_name, fk_worker, fk_pool_coin)
+        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)
         ON CONFLICT (hash_date, unident_name, fk_worker, fk_pool_coin) DO NOTHING;
     `
 

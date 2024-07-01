@@ -5,7 +5,6 @@ import (
 	"log"
 	"strconv"
 	"sync"
-	"time"
 	"worker-service/api"
 	"worker-service/database"
 	"worker-service/models"
@@ -235,8 +234,6 @@ func saveToUnidentHash(workerID, poolID, coin string, asic models.WorkerListItem
 			UnidentName:  asic.WorkerName,
 			FkWorker:     workerID,
 			FkPoolCoin:   poolCoinUUID,
-			LastEdit:     time.Now().Format("2006-01-02"),
-			Status:       0,
 		}
 
 		err = database.InsertUnidentHash(unidentHash)

@@ -127,6 +127,4 @@ type UnidentHash struct {
 	UnidentName  string `json:"unident_name"`
 	FkWorker     string `json:"fk_worker"`
 	FkPoolCoin   string `json:"fk_pool_coin"`
-	LastEdit     string `json:"last_edit"`
-	Status       int    `json:"status"`
 }
